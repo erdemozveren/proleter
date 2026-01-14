@@ -1,0 +1,5 @@
+CompileFlags:
+  Add: [-x, c, -std=c11]
+Diagnostics:
+  ClangTidy:
+    Remove: misc-definitions-in-headers

@@ -1,0 +1,76 @@
+main:
+  enter 2            # slot0 = n, slot1 = result
+  pushi 10
+  store 0            # n = 10
+
+  load 0
+  call fib 1
+  store 1            # result
+
+  pushs "fib("
+  load 0
+  pushs ") = "
+  load 1
+  call $println 4
+  ret_void
+
+# ======================
+# fib(n) — iterative
+# ======================
+fib:
+  enter 4            # locals: a,b,i,c (slots 1..4)
+
+  # if n <= 1 goto base
+  load 0
+  pushi 1
+  lte
+  jnz fib_base
+
+  # a = 0
+  pushi 0
+  store 1
+
+  # b = 1
+  pushi 1
+  store 2
+
+  # i = 2
+  pushi 2
+  store 3
+
+fib_loop:
+  # if i > n goto end
+  load 3
+  load 0
+  gt
+  jnz fib_end
+
+  # c = a + b
+  load 1
+  load 2
+  add
+  store 4
+
+  # a = b
+  load 2
+  store 1
+
+  # b = c
+  load 4
+  store 2
+
+  # i = i + 1
+  load 3
+  pushi 1
+  add
+  store 3
+
+  jmp fib_loop
+
+fib_end:
+  load 2
+  ret
+
+fib_base:
+  load 0
+  ret

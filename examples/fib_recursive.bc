@@ -1,0 +1,45 @@
+main:
+  enter 2 # reserve 2 slot
+  pushi 10
+  dup
+  store 0 # n is in slot 0
+  call fib 1
+  store 1 # result in slot 1
+  pushs "fib("
+  load 0
+  pushs ") = "
+  load 1
+  call $println 4
+  ret_void
+
+# ======================
+# fib(n)
+# ======================
+
+fib:
+# if n <= 1 goto base
+load 0
+pushi 1
+lte
+jnz base
+
+# fib(n - 1)
+load 0
+pushi 1
+sub
+call fib 1
+
+# fib(n - 2)
+load 0
+pushi 2
+sub
+call fib 1
+
+# add results
+add
+ret
+
+# base case
+base:
+load 0
+ret

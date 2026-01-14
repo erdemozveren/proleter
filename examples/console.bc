@@ -1,0 +1,28 @@
+main:
+  pushs "asdasd"
+  call $println 1
+  call $cclear 0
+  pushi 10
+  pushi 3
+  call $cmove 2
+
+  pushi 2   # green
+  pushi 0   # black
+  call $ccolor 2
+
+  pushs "Hello VM!"
+  call $println 1
+  pushs "Line1\nLine2"
+  call $println 1
+  pushs "This is a shows printf usage\nD : %d \nS: %s\n"
+  pushi 35
+  pushs "Text123"
+  call $printf 3
+  pushs "STRING 1 "
+  pushs "STRING 2"
+  concat
+  pushs "STRING 3\n"
+  concat
+  call $printf 1
+  #call $creset 0
+  ret

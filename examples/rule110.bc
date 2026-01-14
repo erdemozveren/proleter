@@ -1,0 +1,273 @@
+# ============================================================
+# Rule 110 test program
+# ============================================================
+
+# ======================
+# main
+# ======================
+main:
+  enter 8            # 0=width, 1=cells, 2=next, 3=i, 4=left, 5=right, 6=step, 7=maxSteps
+# step = 0
+  pushi 0
+  store 6
+
+# maxSteps 
+  pushi 20
+  store 7
+
+  # width = 32
+  pushi 32
+  store 0
+
+  # cells = new int[width]
+  load 0
+  array_new
+  store 1
+
+  # next = new int[width]
+  load 0
+  array_new
+  store 2
+
+  # i = 0
+  pushi 0
+  store 3
+
+# ----------------------
+# init: cells[i] = 0
+# while (i < width)
+# ----------------------
+init_loop:
+  load 3
+  load 0
+  lt
+  jz init_done
+
+  load 1          # array
+  load 3          # index
+  pushi 0         # value
+  array_set
+  pop             # discard returned array
+
+  load 3
+  pushi 1
+  add
+  store 3
+
+  jmp init_loop
+
+init_done:
+
+  # single 1 in the middle: cells[16] = 1
+  load 1
+  pushi 16
+  pushi 1
+  array_set
+  pop
+
+# ======================
+# evolve until maxSteps
+# ======================
+evolve:
+  load 6
+  load 7
+  lt
+  jz done
+  # print current generation
+  pushi 0
+  store 3
+
+print_loop:
+  load 3
+  load 0
+  lt
+  jz print_done
+
+  load 1
+  load 3
+  array_get
+  call $print 1
+
+  load 3
+  pushi 1
+  add
+  store 3
+
+  jmp print_loop
+
+print_done:
+  pushi 0
+  call $println 1     # newline placeholder
+
+  # compute next
+  pushi 0
+  store 3
+
+compute_loop:
+  load 3
+  load 0
+  lt
+  jz compute_done
+
+  # left = 0
+  pushi 0
+  store 4
+
+  # right = 0
+  pushi 0
+  store 5
+
+  # if (i > 0) left = cells[i-1]
+  load 3
+  pushi 0
+  gt
+  jz no_left
+
+  load 1
+  load 3
+  pushi 1
+  sub
+  array_get
+  store 4
+
+no_left:
+
+  # if (i < width-1) right = cells[i+1]
+  load 3
+  load 0
+  pushi 1
+  sub
+  lt
+  jz no_right
+
+  load 1
+  load 3
+  pushi 1
+  add
+  array_get
+  store 5
+
+no_right:
+
+  # next[i] = rule110(left, cells[i], right)
+  # stack must be [array, index, value] for array_set
+  load 2            # next (array)
+  load 3            # i (index)
+  load 4            # left
+  load 1            # cells
+  load 3            # i
+  array_get         # cells[i]
+  load 5            # right
+  call rule110 3    # -> value
+  array_set
+  pop               # discard returned array
+
+  # i++
+  load 3
+  pushi 1
+  add
+  store 3
+
+  jmp compute_loop
+
+compute_done:
+
+  # copy next -> cells
+  pushi 0
+  store 3
+
+copy_loop:
+  load 3
+  load 0
+  lt
+  jz copy_done
+
+  load 1            # cells
+  load 3            # i
+  load 2            # next
+  load 3            # i
+  array_get         # next[i]
+  array_set
+  pop               # discard returned array
+
+  load 3
+  pushi 1
+  add
+  store 3
+
+  jmp copy_loop
+
+copy_done:
+  # inc step
+  load 6
+  pushi 1
+  add
+  store 6
+  jmp evolve
+
+
+# ======================
+# rule110(left, center, right) -> int
+# ones at idx = 1,2,3,5,6
+# idx = left*4 + center*2 + right
+# ======================
+rule110:
+  enter 4            # 0=L,1=C,2=R,3=idx
+
+  load 0
+  pushi 4
+  mul
+  load 1
+  pushi 2
+  mul
+  add
+  load 2
+  add
+  store 3
+
+  load 3
+  pushi 6
+  eq
+  jz r110_5
+  pushi 1
+  ret
+
+r110_5:
+  load 3
+  pushi 5
+  eq
+  jz r110_3
+  pushi 1
+  ret
+
+r110_3:
+  load 3
+  pushi 3
+  eq
+  jz r110_2
+  pushi 1
+  ret
+
+r110_2:
+  load 3
+  pushi 2
+  eq
+  jz r110_1
+  pushi 1
+  ret
+
+r110_1:
+  load 3
+  pushi 1
+  eq
+  jz r110_0
+  pushi 1
+  ret
+
+r110_0:
+  pushi 0
+  ret
+
+done:
+  pushi 0
+  ret

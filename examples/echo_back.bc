@@ -1,0 +1,19 @@
+main:
+  call $cclear
+  pushs "this is a simple echo repl\ntype exit or ctrl+c to exit"
+  call $println 1
+loop:
+  pushs "> "
+  call $print 1
+  call $read_line
+  dup
+  pushs "exit"
+  eq
+  jnz exit
+  call $println 1
+  jmp loop
+
+exit:
+  pushs "good bye!"
+  call $println 1
+  halt

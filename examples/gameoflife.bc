@@ -1,0 +1,784 @@
+# ============================================================
+# Conway's Game of Life (TORUS / WRAP) — INFINITE, STEP-BY-STEP
+# Uses GLOBAL slots for dimensions so you can tweak without
+# touching locals or stack layout.
+#
+# Globals (storeg/loadg):
+#   g0 = WIDTH
+#   g1 = HEIGHT
+#   g2 = SIZE = WIDTH * HEIGHT
+#
+# Builtins:
+#   call $cclear 0
+#   call $cmove 2     (x,y)
+#   call $ccolor 2    (fg,bg)
+#   call $creset 0
+#   call $waitkey 0   (returns key -> popped)
+#   call $print 1
+#
+# Arrays:
+#   array_new expects size on stack and PREALLOCs
+#   array_get: [arr, idx] -> value
+#   array_set: [arr, idx, value] -> arr (we pop after set)
+# ============================================================
+
+main:
+  enter 15
+  # locals:
+  # 0=cur, 1=next,
+  # 2=y, 3=x, 4=idx, 5=count, 6=cell,
+  # 7=ny, 8=nx, 9=nidx,
+  # 10=tmpy, 11=tmpx,
+  # 12=i (for init/copy), 13=t, 14=unused/scratch
+
+  # --------------------
+  # Set globals: WIDTH/HEIGHT (edit these two only)
+  # --------------------
+  pushi 30
+  storeg 0          # WIDTH
+
+  pushi 30
+  storeg 1          # HEIGHT
+
+  loadg 0
+  loadg 1
+  mul
+  storeg 2          # SIZE
+
+  # --------------------
+  # Allocate boards
+  # --------------------
+  loadg 2
+  array_new
+  store 0           # cur
+
+  loadg 2
+  array_new
+  store 1           # next
+
+  # --------------------
+  # Init boards to 0
+  # --------------------
+  pushi 0
+  store 12          # i=0
+
+init_loop:
+  load 12
+  loadg 2
+  lt
+  jz init_done
+
+  load 0
+  load 12
+  pushi 0
+  array_set
+  pop
+
+  load 1
+  load 12
+  pushi 0
+  array_set
+  pop
+
+  load 12
+  pushi 1
+  add
+  store 12
+  jmp init_loop
+
+init_done:
+
+  # --------------------
+  # Seed GLIDER (works for WIDTH>=3, HEIGHT>=3)
+  # (1,0), (2,1), (0,2), (1,2), (2,2)
+  # idx = y*WIDTH + x  with WIDTH in g0
+  # --------------------
+  # idx(1,0)=1
+  load 0
+  pushi 1
+  pushi 1
+  array_set
+  pop
+
+  # idx(2,1)=1*WIDTH+2
+  loadg 0
+  pushi 1
+  mul
+  pushi 2
+  add
+  store 4           # idx temp
+  load 0
+  load 4
+  pushi 1
+  array_set
+  pop
+
+  # idx(0,2)=2*WIDTH+0
+  loadg 0
+  pushi 2
+  mul
+  pushi 0
+  add
+  store 4
+  load 0
+  load 4
+  pushi 1
+  array_set
+  pop
+
+  # idx(1,2)=2*WIDTH+1
+  loadg 0
+  pushi 2
+  mul
+  pushi 1
+  add
+  store 4
+  load 0
+  load 4
+  pushi 1
+  array_set
+  pop
+
+  # idx(2,2)=2*WIDTH+2
+  loadg 0
+  pushi 2
+  mul
+  pushi 2
+  add
+  store 4
+  load 0
+  load 4
+  pushi 1
+  array_set
+  pop
+
+
+# ============================================================
+# FRAME LOOP (INFINITE)
+# ============================================================
+frame_loop:
+  call $cclear 0
+
+  # move cursor to 0,0
+  pushi 0
+  pushi 0
+  call $cmove 2
+
+  # --------------------
+  # PRINT GRID (colored live cells)
+  # --------------------
+  pushi 0
+  store 2           # y=0
+
+print_y:
+  load 2
+  loadg 1
+  lt
+  jz print_done
+
+  # cmove(0,y)
+  pushi 0
+  load 2
+  call $cmove 2
+
+  pushi 0
+  store 3           # x=0
+
+print_x:
+  load 3
+  loadg 0
+  lt
+  jz print_row_end
+
+  # idx = y*WIDTH + x
+  load 2
+  loadg 0
+  mul
+  load 3
+  add
+  store 4
+
+  # cell = cur[idx]
+  load 0
+  load 4
+  array_get
+  store 6
+
+  # if cell == 1 => green "1"
+  load 6
+  pushi 1
+  eq
+  jz print_dead
+
+  pushi 2           # fg green
+  pushi 0           # bg black
+  call $ccolor 2
+
+  pushs "1"
+  call $print 1
+  call $creset 0
+  jmp print_next
+
+print_dead:
+  pushs "0"
+  call $print 1
+
+print_next:
+  load 3
+  pushi 1
+  add
+  store 3
+  jmp print_x
+
+print_row_end:
+  load 2
+  pushi 1
+  add
+  store 2
+  jmp print_y
+
+print_done:
+  # waitkey (step-by-step)
+  #call $waitkey 0
+  #pop
+  pushi 50
+  call $msleep 1
+  # --------------------
+  # COMPUTE NEXT (TORUS WRAP)
+  # --------------------
+  pushi 0
+  store 2           # y=0
+
+comp_y:
+  load 2
+  loadg 1
+  lt
+  jz comp_done
+
+  pushi 0
+  store 3           # x=0
+
+comp_x:
+  load 3
+  loadg 0
+  lt
+  jz comp_row_end
+
+  # idx = y*WIDTH + x
+  load 2
+  loadg 0
+  mul
+  load 3
+  add
+  store 4
+
+  # count = 0
+  pushi 0
+  store 5
+
+  # ==========================================================
+  # Neighbor sum with wrap:
+  # We compute nx,ny for each of 8 offsets and add cur[nidx]
+  #
+  # Wrap pattern:
+  #   nx = x + dx
+  #   if nx < 0 => nx += WIDTH
+  #   if nx >= WIDTH => nx -= WIDTH
+  # same for ny with HEIGHT
+  # ==========================================================
+
+  # -------- neighbor (-1,-1) --------
+  # nx = x-1
+  load 3
+  pushi 1
+  sub
+  store 8
+  # if nx < 0 => nx += WIDTH
+  load 8
+  pushi 0
+  gte
+  jnz n_a_nx_ok1
+  load 8
+  loadg 0
+  add
+  store 8
+n_a_nx_ok1:
+  # if nx >= WIDTH => nx -= WIDTH
+  load 8
+  loadg 0
+  lt
+  jnz n_a_nx_ok2
+  load 8
+  loadg 0
+  sub
+  store 8
+n_a_nx_ok2:
+  # ny = y-1
+  load 2
+  pushi 1
+  sub
+  store 7
+  load 7
+  pushi 0
+  gte
+  jnz n_a_ny_ok1
+  load 7
+  loadg 1
+  add
+  store 7
+n_a_ny_ok1:
+  load 7
+  loadg 1
+  lt
+  jnz n_a_ny_ok2
+  load 7
+  loadg 1
+  sub
+  store 7
+n_a_ny_ok2:
+  # nidx = ny*WIDTH + nx
+  load 7
+  loadg 0
+  mul
+  load 8
+  add
+  store 9
+  # count += cur[nidx]
+  load 5
+  load 0
+  load 9
+  array_get
+  add
+  store 5
+
+  # -------- neighbor (0,-1) --------
+  # nx = x
+  load 3
+  store 8
+  # ny = y-1 (wrap)
+  load 2
+  pushi 1
+  sub
+  store 7
+  load 7
+  pushi 0
+  gte
+  jnz n_b_ny_ok1
+  load 7
+  loadg 1
+  add
+  store 7
+n_b_ny_ok1:
+  load 7
+  loadg 1
+  lt
+  jnz n_b_ny_ok2
+  load 7
+  loadg 1
+  sub
+  store 7
+n_b_ny_ok2:
+  load 7
+  loadg 0
+  mul
+  load 8
+  add
+  store 9
+  load 5
+  load 0
+  load 9
+  array_get
+  add
+  store 5
+
+  # -------- neighbor (+1,-1) --------
+  # nx = x+1 (wrap)
+  load 3
+  pushi 1
+  add
+  store 8
+  load 8
+  pushi 0
+  gte
+  jnz n_c_nx_ok1
+  load 8
+  loadg 0
+  add
+  store 8
+n_c_nx_ok1:
+  load 8
+  loadg 0
+  lt
+  jnz n_c_nx_ok2
+  load 8
+  loadg 0
+  sub
+  store 8
+n_c_nx_ok2:
+  # ny = y-1 (wrap)
+  load 2
+  pushi 1
+  sub
+  store 7
+  load 7
+  pushi 0
+  gte
+  jnz n_c_ny_ok1
+  load 7
+  loadg 1
+  add
+  store 7
+n_c_ny_ok1:
+  load 7
+  loadg 1
+  lt
+  jnz n_c_ny_ok2
+  load 7
+  loadg 1
+  sub
+  store 7
+n_c_ny_ok2:
+  load 7
+  loadg 0
+  mul
+  load 8
+  add
+  store 9
+  load 5
+  load 0
+  load 9
+  array_get
+  add
+  store 5
+
+  # -------- neighbor (-1,0) --------
+  # nx = x-1 (wrap)
+  load 3
+  pushi 1
+  sub
+  store 8
+  load 8
+  pushi 0
+  gte
+  jnz n_d_nx_ok1
+  load 8
+  loadg 0
+  add
+  store 8
+n_d_nx_ok1:
+  load 8
+  loadg 0
+  lt
+  jnz n_d_nx_ok2
+  load 8
+  loadg 0
+  sub
+  store 8
+n_d_nx_ok2:
+  # ny = y
+  load 2
+  store 7
+  load 7
+  loadg 0
+  mul
+  load 8
+  add
+  store 9
+  load 5
+  load 0
+  load 9
+  array_get
+  add
+  store 5
+
+  # -------- neighbor (+1,0) --------
+  # nx = x+1 (wrap)
+  load 3
+  pushi 1
+  add
+  store 8
+  load 8
+  pushi 0
+  gte
+  jnz n_e_nx_ok1
+  load 8
+  loadg 0
+  add
+  store 8
+n_e_nx_ok1:
+  load 8
+  loadg 0
+  lt
+  jnz n_e_nx_ok2
+  load 8
+  loadg 0
+  sub
+  store 8
+n_e_nx_ok2:
+  # ny = y
+  load 2
+  store 7
+  load 7
+  loadg 0
+  mul
+  load 8
+  add
+  store 9
+  load 5
+  load 0
+  load 9
+  array_get
+  add
+  store 5
+
+  # -------- neighbor (-1,+1) --------
+  # nx = x-1 (wrap)
+  load 3
+  pushi 1
+  sub
+  store 8
+  load 8
+  pushi 0
+  gte
+  jnz n_f_nx_ok1
+  load 8
+  loadg 0
+  add
+  store 8
+n_f_nx_ok1:
+  load 8
+  loadg 0
+  lt
+  jnz n_f_nx_ok2
+  load 8
+  loadg 0
+  sub
+  store 8
+n_f_nx_ok2:
+  # ny = y+1 (wrap)
+  load 2
+  pushi 1
+  add
+  store 7
+  load 7
+  pushi 0
+  gte
+  jnz n_f_ny_ok1
+  load 7
+  loadg 1
+  add
+  store 7
+n_f_ny_ok1:
+  load 7
+  loadg 1
+  lt
+  jnz n_f_ny_ok2
+  load 7
+  loadg 1
+  sub
+  store 7
+n_f_ny_ok2:
+  load 7
+  loadg 0
+  mul
+  load 8
+  add
+  store 9
+  load 5
+  load 0
+  load 9
+  array_get
+  add
+  store 5
+
+  # -------- neighbor (0,+1) --------
+  # nx = x
+  load 3
+  store 8
+  # ny = y+1 (wrap)
+  load 2
+  pushi 1
+  add
+  store 7
+  load 7
+  pushi 0
+  gte
+  jnz n_g_ny_ok1
+  load 7
+  loadg 1
+  add
+  store 7
+n_g_ny_ok1:
+  load 7
+  loadg 1
+  lt
+  jnz n_g_ny_ok2
+  load 7
+  loadg 1
+  sub
+  store 7
+n_g_ny_ok2:
+  load 7
+  loadg 0
+  mul
+  load 8
+  add
+  store 9
+  load 5
+  load 0
+  load 9
+  array_get
+  add
+  store 5
+
+  # -------- neighbor (+1,+1) --------
+  # nx = x+1 (wrap)
+  load 3
+  pushi 1
+  add
+  store 8
+  load 8
+  pushi 0
+  gte
+  jnz n_h_nx_ok1
+  load 8
+  loadg 0
+  add
+  store 8
+n_h_nx_ok1:
+  load 8
+  loadg 0
+  lt
+  jnz n_h_nx_ok2
+  load 8
+  loadg 0
+  sub
+  store 8
+n_h_nx_ok2:
+  # ny = y+1 (wrap)
+  load 2
+  pushi 1
+  add
+  store 7
+  load 7
+  pushi 0
+  gte
+  jnz n_h_ny_ok1
+  load 7
+  loadg 1
+  add
+  store 7
+n_h_ny_ok1:
+  load 7
+  loadg 1
+  lt
+  jnz n_h_ny_ok2
+  load 7
+  loadg 1
+  sub
+  store 7
+n_h_ny_ok2:
+  load 7
+  loadg 0
+  mul
+  load 8
+  add
+  store 9
+  load 5
+  load 0
+  load 9
+  array_get
+  add
+  store 5
+
+  # cell = cur[idx]
+  load 0
+  load 4
+  array_get
+  store 6
+
+  # Standard Conway rules:
+  load 6
+  pushi 1
+  eq
+  jz dead_case
+
+  load 5
+  pushi 2
+  lt
+  jnz write_zero
+  load 5
+  pushi 3
+  gt
+  jnz write_zero
+  jmp write_one
+
+dead_case:
+  load 5
+  pushi 3
+  eq
+  jnz write_one
+  jmp write_zero
+
+write_one:
+  load 1
+  load 4
+  pushi 1
+  array_set
+  pop
+  jmp write_done
+
+write_zero:
+  load 1
+  load 4
+  pushi 0
+  array_set
+  pop
+
+write_done:
+  load 3
+  pushi 1
+  add
+  store 3
+  jmp comp_x
+
+comp_row_end:
+  load 2
+  pushi 1
+  add
+  store 2
+  jmp comp_y
+
+comp_done:
+  # copy next -> cur and clear next
+  pushi 0
+  store 12
+
+copy_loop:
+  load 12
+  loadg 2
+  lt
+  jz copy_done
+
+  load 0
+  load 12
+  load 1
+  load 12
+  array_get
+  array_set
+  pop
+
+  load 1
+  load 12
+  pushi 0
+  array_set
+  pop
+
+  load 12
+  pushi 1
+  add
+  store 12
+  jmp copy_loop
+
+copy_done:
+  jmp frame_loop

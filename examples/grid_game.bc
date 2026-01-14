@@ -1,0 +1,115 @@
+main:
+  enter 4        # slot0 = x, slot1 = y, slot2 = key, slot3 = GRID_SIZE
+
+  # x 
+  pushi 5
+  store 0
+
+  # y 
+  pushi 5
+  store 1
+
+  # grid_SIZE 
+  pushi 20
+  store 3
+
+loop:
+  call $cclear 0
+  # draw #
+  load 0
+  load 1
+  call $cmove 2
+
+  pushs "#"
+  call $print 1
+
+  pushi 0
+  pushi 0
+  call $cmove 2
+
+  # key = waitkey()
+  call $waitkey 0
+  store 2
+
+  # if key == 'q' -> end
+  load 2
+  pushi 113
+  eq
+  jnz end
+
+  # if key == 'w' (up)
+  load 2
+  pushi 119
+  eq
+  jnz move_up
+
+  # if key == 's' (down)
+  load 2
+  pushi 115
+  eq
+  jnz move_down
+
+  # if key == 'a' (left)
+  load 2
+  pushi 97
+  eq
+  jnz move_left
+
+  # if key == 'd' (right)
+  load 2
+  pushi 100
+  eq
+  jnz move_right
+
+  jmp loop
+
+# ======================
+move_up:
+  load 1
+  pushi 1
+  sub
+  store 1
+  jmp clamp_xy
+
+move_down:
+  load 1
+  pushi 1
+  add
+  store 1
+  jmp clamp_xy
+
+move_left:
+  load 0
+  pushi 1
+  sub
+  store 0
+  jmp clamp_xy
+
+move_right:
+  load 0
+  pushi 1
+  add
+  store 0
+  jmp clamp_xy
+
+clamp_xy:
+  load 0
+  pushi 1
+  load 3
+  call $clamp 3
+  store 0
+
+  load 1
+  pushi 1
+  load 3
+  call $clamp 3
+  store 1
+
+  jmp loop
+
+# ======================
+end:
+  call $cclear 0
+  pushs "bye\n"
+  call $print 1
+  ret_void
