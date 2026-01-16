@@ -40,9 +40,9 @@ static int read_single_key(void) { return _getch(); }
 
 // I/O
 
-static void builtin_waitkey(VM *vm, int argc) {
+static void builtin_getchr(VM *vm, int argc) {
   if (argc != 0) {
-    printf("waitkey expects 0 arguments\n");
+    printf("getchr expects no arguments\n");
     exit(1);
   }
 
@@ -202,7 +202,7 @@ static void builtin_read_int(VM *vm, int argc) {
 
 static void builtin_printf(VM *vm, int argc) {
   if (argc <= 0) {
-    vm_runtime_errorf(&vm->program[vm->ip],
+    vm_runtime_errorf(&vm->program->inst[vm->ip],
                       "printf excpects at least 1 argument");
   }
   size_t argsize = (size_t)argc;

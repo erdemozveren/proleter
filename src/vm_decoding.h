@@ -297,7 +297,8 @@ static int find_op(const char *s, OpCode *out) {
     }
   return 0;
 }
-/* ================= label syntax ================= */
+
+/* ================= label/named builtins syntax ================= */
 
 static size_t find_builtin_or_die(VM *vm, const char *name, const char *path,
                                   size_t line) {
@@ -357,7 +358,7 @@ static char *find_eol(char *p) {
   return p;
 }
 
-static Inst *load_program(VM *vm, const char *path, size_t *out_count) {
+static Inst *load_program(VM *vm, const char *path) {
   char *source = read_file(path);
   if (!source)
     return NULL;
@@ -410,6 +411,10 @@ static Inst *load_program(VM *vm, const char *path, size_t *out_count) {
   tmplabelname.buf[0] = '\0';
   tmplabelname.len = 0;
   Inst *code = (Inst *)calloc(ip, sizeof(Inst));
+
+  Program *program = malloc(sizeof(Program));
+  program->inst_count = 0;
+  program->inst = code;
   if (!code)
     exit(1);
 
@@ -566,23 +571,13 @@ static Inst *load_program(VM *vm, const char *path, size_t *out_count) {
     code[pc++] = in;
     line++;
   }
-
-  if (out_count)
-    *out_count = ip;
+  vm->program = program;
+  vm->program->inst_count = ip;
 
   free(source);
   free(tmplabelname.buf);
   tmplabelname.len = 0;
   return code;
-}
-
-static void free_program(Inst *p) {
-  // for (int i = 0; i < count; i++) {
-  //      if (code[i].type == OP_PUSH_STRING) {
-  //          free(code[i].chars);
-  //      }
-  //  }
-  free(p);
 }
 
 #endif

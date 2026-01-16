@@ -184,6 +184,7 @@ static const char *value_type_name(ValueType t) {
     return "ref_id";
   case VAL_TYPE_END:
   default:
+    printf("%d\n", t);
     return "unknown";
   }
 }
@@ -228,7 +229,8 @@ static const Value *assertType(VM *vm, const Value *v, ...) {
 
   fprintf(stderr, ", got %s", value_type_name(v->type));
   if (vm) {
-    fprintf(stderr, ", at line %ld\n", vm->program[vm->ip].soure_line_num);
+    fprintf(stderr, ", at line %ld\n",
+            vm->program->inst[vm->ip].soure_line_num);
   } else {
     fprintf(stderr, "\n");
   }
@@ -323,8 +325,8 @@ static void assert_min_stack(VM *vm, size_t min) {
   vm_runtime_errorf(NULL,
                     "Stack Underflow -- instruction need %ld values got %ld, "
                     "at line %ld (%s)",
-                    min, vm->sp, vm->program[vm->ip].soure_line_num,
-                    opcode_name(vm->program[vm->ip].type));
+                    min, vm->sp, vm->program->inst[vm->ip].soure_line_num,
+                    opcode_name(vm->program->inst[vm->ip].type));
 }
 
 static void push(VM *vm, Value v) {
@@ -440,6 +442,18 @@ static void *vm_heap_alloc(Heap *h, size_t size, size_t align) {
 #endif
 
   return ptr;
+}
+
+static void free_program(Program *p) {
+  // for (int i = 0; i < count; i++) {
+  //      if (code[i].type == OP_PUSH_STRING) {
+  //          free(code[i].chars);
+  //      }
+  //  }
+  if (p->inst != NULL) {
+    free(p->inst);
+  }
+  free(p);
 }
 
 static void vm_heap_free(VM *vm) {

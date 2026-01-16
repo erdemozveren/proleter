@@ -1,7 +1,7 @@
 # ============================================================
 # Conway's Game of Life (TORUS / WRAP)
 # Render: ONLY live cells (█) using cmove
-# Frame: clear -> draw -> waitkey -> compute -> swap -> loop
+# Frame: clear -> draw -> getchr -> compute -> swap -> loop
 #
 # Globals:
 #   g0 = WIDTH
@@ -238,7 +238,7 @@ draw_done:
   call $cmove 2
 
 # pause so you can SEE this frame
-  #call $waitkey 0
+  #call $getchr 0
   #pop
 # or sleep to slow down
   pushi 50

@@ -1,7 +1,6 @@
 #ifndef VM_IMP_H
 #define VM_IMP_H
 #include "vm_builtins.h"
-#include "vm_decoding.h"
 #include "vm_structs.h"
 #include "vm_utils.h"
 #include <assert.h>
@@ -559,56 +558,40 @@ static void print_inst(const Inst *in) {
   printf(" }\n");
 }
 
-int main(int argc, char **argv) {
-  const char *progname = argv[0];
-  const char *p = strrchr(progname, '/');
-  if (p)
-    progname = p + 1;
-  if (argc < 2) {
-    fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "  %s <file>\n", progname);
-    return 1;
-  }
-
-  const char *source_path = argv[1];
-  if (access(source_path, F_OK) != 0) {
-    printf("File %s not exists\n", source_path);
-    exit(1);
-  }
-
+static void register_std_lib(VM *vm) {
   srand((unsigned)time(NULL));
-  VM vm = {0};
-  vm.heap =
-      (Heap){.current = NULL, .used = 0, .capacity = (1024 * 1024 * 1024)};
+
   // Debug
-  register_builtin_fn(&vm, "dump_stack", builtin_dump_stack);
-  register_builtin_fn(&vm, "exit", builtin_exit);
+  register_builtin_fn(vm, "dump_stack", builtin_dump_stack);
+  register_builtin_fn(vm, "exit", builtin_exit);
   // I/O
-  register_builtin_fn(&vm, "cclear", builtin_cclear);
-  register_builtin_fn(&vm, "cmove", builtin_cmove);
-  register_builtin_fn(&vm, "ccolor", builtin_ccolor);
-  register_builtin_fn(&vm, "creset", builtin_creset);
-  register_builtin_fn(&vm, "print", builtin_print);
-  register_builtin_fn(&vm, "println", builtin_println);
-  register_builtin_fn(&vm, "printf", builtin_printf);
-  register_builtin_fn(&vm, "read_int", builtin_read_int);
-  register_builtin_fn(&vm, "read_line", builtin_read_line);
-  register_builtin_fn(&vm, "waitkey", builtin_waitkey);
-  register_builtin_fn(&vm, "msleep", builtin_sleepms);
+  register_builtin_fn(vm, "cclear", builtin_cclear);
+  register_builtin_fn(vm, "cmove", builtin_cmove);
+  register_builtin_fn(vm, "ccolor", builtin_ccolor);
+  register_builtin_fn(vm, "creset", builtin_creset);
+  register_builtin_fn(vm, "print", builtin_print);
+  register_builtin_fn(vm, "println", builtin_println);
+  register_builtin_fn(vm, "printf", builtin_printf);
+  register_builtin_fn(vm, "read_int", builtin_read_int);
+  register_builtin_fn(vm, "read_line", builtin_read_line);
+  register_builtin_fn(vm, "getchr", builtin_getchr);
+  register_builtin_fn(vm, "msleep", builtin_sleepms);
   // Math
-  register_builtin_fn(&vm, "min", builtin_min);
-  register_builtin_fn(&vm, "max", builtin_max);
-  register_builtin_fn(&vm, "abs", builtin_abs);
-  register_builtin_fn(&vm, "rand", builtin_rand);
-  register_builtin_fn(&vm, "rand_range", builtin_rand_range);
-  register_builtin_fn(&vm, "clamp", builtin_clamp);
-  size_t count = 0;
-  vm.program = load_program(&vm, source_path, &count);
-  while (!vm.halt && (vm.ip < count && vm.program[vm.ip].type != OP_HALT)) {
-    // printf("execute ip %d\n", vm.ip);
-    // print_inst(&program[vm.ip]);
-    Inst *previnst = &vm.program[vm.ip];
-    int next_ip = vm_inst_execute(&vm, vm.program[vm.ip]);
+  register_builtin_fn(vm, "min", builtin_min);
+  register_builtin_fn(vm, "max", builtin_max);
+  register_builtin_fn(vm, "abs", builtin_abs);
+  register_builtin_fn(vm, "rand", builtin_rand);
+  register_builtin_fn(vm, "rand_range", builtin_rand_range);
+  register_builtin_fn(vm, "clamp", builtin_clamp);
+}
+
+static void vm_run(VM *vm) {
+  while (!vm->halt && (vm->ip < vm->program->inst_count &&
+                       vm->program->inst[vm->ip].type != OP_HALT)) {
+    // printf("execute ip %d\n", vm->ip);
+    // print_inst(&vm->program->inst[vm->ip]);
+    Inst *previnst = &vm->program->inst[vm->ip];
+    int next_ip = vm_inst_execute(vm, vm->program->inst[vm->ip]);
     if (next_ip != 0) {
       if (previnst) {
         printf("Error on instruction at\n");
@@ -617,8 +600,5 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  vm_heap_free(&vm);
-  free_program(vm.program);
-  return 0;
 }
 #endif /* ifndef VM_IMP_H */

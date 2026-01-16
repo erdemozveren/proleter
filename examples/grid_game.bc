@@ -27,8 +27,8 @@ loop:
   pushi 0
   call $cmove 2
 
-  # key = waitkey()
-  call $waitkey 0
+  # key = getchr()
+  call $getchr 0
   store 2
 
   # if key == 'q' -> end

@@ -13,7 +13,7 @@
 #   call $cmove 2     (x,y)
 #   call $ccolor 2    (fg,bg)
 #   call $creset 0
-#   call $waitkey 0   (returns key -> popped)
+#   call $getchr 0   (returns key -> popped)
 #   call $print 1
 #
 # Arrays:
@@ -238,8 +238,8 @@ print_row_end:
   jmp print_y
 
 print_done:
-  # waitkey (step-by-step)
-  #call $waitkey 0
+  # getchr (step-by-step)
+  #call $getchr 0
   #pop
   pushi 50
   call $msleep 1

@@ -5,11 +5,11 @@ DEBUG_FLAGS := -g -O0 -Werror -Wswitch-enum -Wmissing-prototypes -Wstrict-protot
                -fsanitize=address,undefined
 RELEASE_FLAGS := -O2
 
-vm: src/vm.c | build
-	$(CC) $(CFLAGS) $(RELEASE_FLAGS) src/vm.c -o build/vm
+vm: src/vm.h | build
+	$(CC) $(CFLAGS) $(RELEASE_FLAGS) src/vm.h -o build/vm.o
 
-debug: src/vm.c | build
-	$(CC) $(CFLAGS) $(DEBUG_FLAGS) src/vm.c -o build/vm
+debug: src/main.c| build
+	$(CC) $(CFLAGS) $(DEBUG_FLAGS) src/main.c -o build/vm
 
 build:
 	mkdir -p build

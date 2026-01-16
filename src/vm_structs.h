@@ -164,10 +164,10 @@ typedef enum {
 
 typedef struct {
   union {
-    String *str;
     int64_t operand;
     size_t ref;
     double d;
+    String *str;
   };
   OpCode type;
   ValueType op_type;
@@ -183,7 +183,7 @@ typedef struct {
 struct VM {
   Value stack[STACK_MAX];
   Value globals[GLOBALS_MAX];
-  Inst *program;
+  Program *program;
   BuiltinFunc functions[FN_MAX];
   CallFrame frames[CALL_MAX];
   BuiltinMap builtin_map[FN_MAX];
