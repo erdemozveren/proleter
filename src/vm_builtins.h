@@ -152,6 +152,9 @@ static void builtin_print(VM *vm, int argc) {
     case VAL_ARRAY:
       printf("Array(%ld)", v.as.arr->len);
       break;
+    case VAL_OBJECT:
+      printf("Object");
+      break;
     case VAL_NIL:
       printf("<nil>");
       break;

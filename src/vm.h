@@ -360,6 +360,57 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     vm->ip += 1;
     break;
   }
+  case OP_OBJECT_NEW: {
+    push(vm, vm_object_new(vm, 0));
+    vm->ip += 1;
+    break;
+  }
+  case OP_OBJECT_SET: {
+    assert_min_stack(vm, 3);
+    Value v = pop(vm);
+    Value key = pop(vm);
+    Value obj = pop(vm);
+    ASSERT_TYPE(vm, &obj, VAL_OBJECT);
+    ASSERT_TYPE(vm, &key, VAL_STR);
+    vm_object_set(vm, obj.as.obj, key.as.str->chars, v);
+    push(vm, obj);
+    vm->ip += 1;
+    break;
+  }
+  case OP_OBJECT_DEL: {
+    assert_min_stack(vm, 2);
+    Value key = pop(vm);
+    Value obj = pop(vm);
+    ASSERT_TYPE(vm, &obj, VAL_OBJECT);
+    ASSERT_TYPE(vm, &key, VAL_STR);
+    vm_object_del(obj.as.obj, key.as.str->chars);
+    push(vm, obj);
+    vm->ip += 1;
+    break;
+  }
+  case OP_OBJECT_GET: {
+    assert_min_stack(vm, 2);
+    Value key = pop(vm);
+    Value obj = pop(vm);
+    ASSERT_TYPE(vm, &obj, VAL_OBJECT);
+    ASSERT_TYPE(vm, &key, VAL_STR);
+    Value out = {0};
+    if (vm_object_get(obj.as.obj, key.as.str->chars, &out)) {
+      push(vm, out);
+    } else {
+      push(vm, VM_NIL);
+    }
+    vm->ip += 1;
+    break;
+  }
+  case OP_OBJECT_LEN: {
+    assert_min_stack(vm, 1);
+    Value obj = pop(vm);
+    ASSERT_TYPE(vm, &obj, VAL_OBJECT);
+    push(vm, vm_new_int((int64_t)obj.as.obj->len));
+    vm->ip += 1;
+    break;
+  }
 
   case OP_ARRAY_NEW: {
     assert_min_stack(vm, 1);

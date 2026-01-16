@@ -1,0 +1,19 @@
+main:
+  object_new
+  pushs "x"
+  pushi 15
+  object_set
+  dup
+  pushs "x"
+  object_get
+  pushs "X should be 15 => "
+  swap
+  call $println 2
+  pop
+  pushs "x"
+  object_del
+  pushs "Key deleted, Object length must be 0 => "
+  swap
+  object_len
+  call $println 2
+  ret

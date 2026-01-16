@@ -1,5 +1,7 @@
 #include "vm.h"
 #include "vm_decoding.h"
+#include "vm_utils.h"
+#include <stdio.h>
 
 int main(int argc, char **argv) {
   const char *progname = argv[0];

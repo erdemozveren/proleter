@@ -12,11 +12,7 @@
 #define CALL_MAX 256
 #define FN_MAX 256
 
-typedef enum {
-  OBJ_STRING = 1,
-  OBJ_ARRAY,
-  // OBJ_OBJECT // future
-} ObjKind;
+typedef enum { OBJ_STRING = 1, OBJ_ARRAY, OBJ_OBJECT } ObjKind;
 
 typedef struct HeapObj {
   uint8_t kind; // stores ObjKind value
@@ -43,16 +39,19 @@ typedef enum {
   VAL_DOUBLE,
   VAL_STR,
   VAL_ARRAY,
+  VAL_OBJECT,
   VAL_REF,
   VAL_TYPE_END
 } ValueType;
 
 typedef struct Array Array;
+typedef struct Object Object;
 typedef struct {
   ValueType type;
   union {
     String *str;
     Array *arr;
+    Object *obj;
     int64_t i;
     size_t u;
     double d;
@@ -65,6 +64,19 @@ struct Array {
   size_t cap;
   Value *items;
 };
+
+typedef struct {
+  char *key;
+  Value value;
+} ObjEntry;
+
+typedef struct Object {
+  HeapObj h;
+  size_t len;
+  size_t cap;
+  ObjEntry *entries;
+  struct Object *proto; // optional, can be NULL
+} Object;
 
 typedef struct VM VM;
 typedef void (*BuiltinFnCb)(VM *vm, int argc);
@@ -154,6 +166,12 @@ typedef enum {
   OP_ARRAY_GET,
   OP_ARRAY_SET,
   OP_ARRAY_LEN,
+
+  OP_OBJECT_NEW,
+  OP_OBJECT_DEL,
+  OP_OBJECT_GET,
+  OP_OBJECT_SET,
+  OP_OBJECT_LEN,
 
   OP_CALL,
   OP_RET,

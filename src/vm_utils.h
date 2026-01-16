@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #define HEAP_BLOCK_SIZE (1024 * 1024) // 1 MiB blocks
 #define ASSERT_TYPE(vm, v, ...) assertType((vm), (v), __VA_ARGS__, VAL_TYPE_END)
@@ -45,6 +47,8 @@ static char *typeof_value(ValueType type) {
     return "string";
   case VAL_ARRAY:
     return "array";
+  case VAL_OBJECT:
+    return "object";
   case VAL_REF:
     return "ref";
   case VAL_TYPE_END:
@@ -153,6 +157,17 @@ static const char *opcode_name(OpCode op) {
   case OP_ARRAY_LEN:
     return "array_len";
 
+  case OP_OBJECT_NEW:
+    return "object_new";
+  case OP_OBJECT_DEL:
+    return "object_del";
+  case OP_OBJECT_GET:
+    return "object_get";
+  case OP_OBJECT_SET:
+    return "object_set";
+  case OP_OBJECT_LEN:
+    return "object_len";
+
   case OP_CALL:
     return "call";
   case OP_RET:
@@ -169,6 +184,7 @@ static const char *opcode_name(OpCode op) {
 }
 
 static const char *value_type_name(ValueType t) {
+  // same as typeof_value but for internals, doesnt panic
   switch (t) {
   case VAL_NIL:
     return "nil";
@@ -180,6 +196,8 @@ static const char *value_type_name(ValueType t) {
     return "string";
   case VAL_ARRAY:
     return "array";
+  case VAL_OBJECT:
+    return "object";
   case VAL_REF:
     return "ref_id";
   case VAL_TYPE_END:
@@ -302,6 +320,9 @@ static void vm_print_stack_top(const VM *vm) {
     case VAL_ARRAY:
       printf("ARRAY(%ld)\n", v.as.arr->len);
       break;
+    case VAL_OBJECT:
+      printf("OBJECT(%ld)\n", v.as.obj->len);
+      break;
 
     case VAL_STR:
       printf("STRING \"%s\"\n", v.as.str->chars);
@@ -365,6 +386,8 @@ static inline int val_eq(Value a, Value b) {
     return 1;
   case VAL_ARRAY:
     return a.as.arr == b.as.arr;
+  case VAL_OBJECT:
+    return a.as.obj == b.as.obj;
 
   case VAL_STR:
     return strcmp(a.as.str->chars, b.as.str->chars) == 0;
@@ -476,6 +499,97 @@ static Value vm_new_double(double val) {
   return (Value){.type = VAL_DOUBLE, .as.d = val};
 }
 
+static Value vm_object_new(VM *vm, size_t initial_cap) {
+  Object *o = vm_heap_alloc(&vm->heap, sizeof(Object), alignof(Object));
+
+  o->h.kind = OBJ_OBJECT;
+  o->h.size = sizeof(Object);
+
+  o->len = 0;
+  o->cap = initial_cap;
+  o->proto = NULL;
+
+  if (initial_cap > 0) {
+    o->entries = vm_heap_alloc(&vm->heap, initial_cap * sizeof(ObjEntry),
+                               alignof(ObjEntry));
+  } else {
+    o->entries = NULL;
+  }
+
+  return (Value){.type = VAL_OBJECT, .as.obj = o};
+}
+static void vm_object_grow(VM *vm, Object *o, size_t needed_size) {
+  assert(needed_size != 0);
+
+  if (needed_size >= o->cap) {
+    ObjEntry *new_entries = vm_heap_alloc(
+        &vm->heap, needed_size * sizeof(ObjEntry), alignof(ObjEntry));
+
+    if (o->entries) {
+      memcpy(new_entries, o->entries, o->len * sizeof(ObjEntry));
+    }
+
+    o->entries = new_entries;
+    o->cap = needed_size;
+
+    o->h.size = sizeof(Object) + o->cap * sizeof(ObjEntry);
+    // old buffer becomes garbage (GC later)
+  }
+}
+
+static void vm_object_set(VM *vm, Object *o, const char *key, Value v) {
+  // overwrite if exists
+  for (size_t i = 0; i < o->len; i++) {
+    if (strcmp(o->entries[i].key, key) == 0) {
+      o->entries[i].value = v;
+      return;
+    }
+  }
+
+  // grow if needed
+  if (o->len >= o->cap) {
+    size_t new_cap = o->cap ? o->cap * 2 : 8;
+    vm_object_grow(vm, o, new_cap);
+  }
+  size_t keylen = strlen(key);
+  o->entries[o->len].key = vm_heap_alloc(&vm->heap, keylen + 1, alignof(char));
+  memcpy(o->entries[o->len].key, key, keylen);
+  o->entries[o->len].key[keylen] = '\0';
+  o->entries[o->len].value = v;
+  o->len++;
+}
+
+static bool vm_object_get(Object *o, const char *key, Value *out) {
+  for (size_t i = 0; i < o->len; i++) {
+    if (strcmp(o->entries[i].key, key) == 0) {
+      *out = o->entries[i].value;
+      return true;
+    }
+  }
+
+  if (o->proto) {
+    return vm_object_get(o->proto, key, out);
+  }
+
+  return false;
+}
+
+static void vm_object_del(Object *o, const char *key) {
+  for (size_t i = 0; i < o->len; i++) {
+    if (strcmp(o->entries[i].key, key) == 0) {
+
+      for (size_t j = i; j < o->len - 1; j++) {
+        o->entries[j] = o->entries[j + 1];
+      }
+
+      o->len--;
+      return;
+    }
+  }
+
+  // not found → no-op
+}
+
 static Value vm_array_new(VM *vm, size_t initial_cap) {
   Array *a = vm_heap_alloc(&vm->heap, sizeof(Array), alignof(Array));
 
@@ -502,6 +616,8 @@ static void vm_array_grow(VM *vm, Array *a, size_t needed_size) {
     a->items = new_items;
     a->cap = needed_size;
     a->len = needed_size;
+    a->h.size = sizeof(Array) + a->cap * sizeof(Value);
+
     // old buffer becomes garbage (GC later)
   }
 }
@@ -642,6 +758,7 @@ static size_t value_char_len(Value *v) {
     len = snprintf(NULL, 0, "%ld", v->as.u);
     break;
   case VAL_ARRAY:
+  case VAL_OBJECT:
     // fallthrough
   case VAL_NIL:
   case VAL_TYPE_END:
@@ -657,7 +774,7 @@ static size_t value_char_len(Value *v) {
   return (size_t)len;
 }
 
-static size_t append_value(char *out, size_t cap, size_t off, Value *v) {
+static size_t append_value_as_str(char *out, size_t cap, size_t off, Value *v) {
   switch (v->type) {
   case VAL_INT:
     return off + (size_t)snprintf(out + off, cap - off, "%d", (int)v->as.i);
@@ -669,6 +786,7 @@ static size_t append_value(char *out, size_t cap, size_t off, Value *v) {
   case VAL_REF:
     return off + (size_t)snprintf(out + off, cap - off, "%ld", v->as.u);
   case VAL_ARRAY:
+  case VAL_OBJECT:
     // fallthrough
   case VAL_NIL:
   case VAL_TYPE_END:
@@ -683,7 +801,7 @@ static void concat_val_as_string(Value *a, Value *b, char **out) {
   size_t size = sizeof(char) * (alen + blen + 1);
   size_t off = 0;
   *out = malloc(size);
-  off = append_value(*out, size, off, a);
-  off = append_value(*out, size, off, b);
+  off = append_value_as_str(*out, size, off, a);
+  off = append_value_as_str(*out, size, off, b);
 }
 #endif
