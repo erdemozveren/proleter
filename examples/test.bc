@@ -1,0 +1,28 @@
+pushfn main
+call 0
+halt
+
+testfn:
+pushi 2
+add
+ret
+
+main:
+  pushs "./build/libmystd.so"
+  loaddll
+  storeg 0
+  enter 1
+  pushi 2
+  pushi 3
+  add
+  pushi 5
+  mul
+  store 0
+  loadg 0
+  pushs "printf"
+  object_get
+  pushs "Result = %d\n"
+  load 0
+  call 2
+  pushi 0
+  ret

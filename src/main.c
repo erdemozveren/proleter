@@ -24,10 +24,11 @@ int main(int argc, char **argv) {
   VM vm = {0};
   vm.heap =
       (Heap){.current = NULL, .used = 0, .capacity = (1024 * 1024 * 1024)};
-  register_std_lib(&vm);
   load_program(&vm, source_path);
   vm_run(&vm);
+  vm_print_stack_top(&vm);
   vm_heap_free(&vm);
   free_program(vm.program);
+  printf("REACHED END\n");
   return 0;
 }

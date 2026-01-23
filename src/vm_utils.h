@@ -3,6 +3,7 @@
 
 #include "vm_structs.h"
 #include <assert.h>
+#include <dlfcn.h>
 #include <stdalign.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -49,8 +50,8 @@ static char *typeof_value(ValueType type) {
     return "array";
   case VAL_OBJECT:
     return "object";
-  case VAL_REF:
-    return "ref";
+  case VAL_CALLABLE:
+    return "function";
   case VAL_TYPE_END:
     vm_runtime_errorf(NULL, "type_end should never fire in typeof_value");
     break;
@@ -73,6 +74,8 @@ static const char *opcode_name(OpCode op) {
     return "pushd";
   case OP_PUSH_STR:
     return "pushs";
+  case OP_PUSH_FN:
+    return "pushfn";
 
   case OP_ADD:
     return "add";
@@ -175,6 +178,9 @@ static const char *opcode_name(OpCode op) {
   case OP_RET_VOID:
     return "ret_void";
 
+  case OP_LOADDLL:
+    return "loaddll";
+
   case OP_HALT:
     return "halt";
 
@@ -198,8 +204,8 @@ static const char *value_type_name(ValueType t) {
     return "array";
   case VAL_OBJECT:
     return "object";
-  case VAL_REF:
-    return "ref_id";
+  case VAL_CALLABLE:
+    return "function";
   case VAL_TYPE_END:
   default:
     printf("%d\n", t);
@@ -305,8 +311,12 @@ static void vm_print_stack_top(const VM *vm) {
     printf("[%2ld] ", idx);
 
     switch (v.type) {
-    case VAL_REF:
-      printf("REF_ID    %ld\n", v.as.i);
+    case VAL_CALLABLE:
+      if (v.as.fn->type == CALLABLE_NATIVE) {
+        printf("func %s()\n", v.as.fn->name);
+      } else {
+        printf("func ip:%ld()\n", v.as.fn->as.entry_ip);
+      }
       break;
     case VAL_NIL:
       printf("NIL\n");
@@ -379,8 +389,8 @@ static inline int val_eq(Value a, Value b) {
   }
 
   switch (a.type) {
-  case VAL_REF:
-    return a.as.i == b.as.i;
+  case VAL_CALLABLE:
+    return a.as.fn == b.as.fn;
 
   case VAL_NIL:
     return 1;
@@ -754,9 +764,7 @@ static size_t value_char_len(Value *v) {
   case VAL_STR:
     len = (int)v->as.str->len;
     break;
-  case VAL_REF:
-    len = snprintf(NULL, 0, "%ld", v->as.u);
-    break;
+  case VAL_CALLABLE:
   case VAL_ARRAY:
   case VAL_OBJECT:
     // fallthrough
@@ -783,8 +791,7 @@ static size_t append_value_as_str(char *out, size_t cap, size_t off, Value *v) {
   case VAL_STR:
     return off + (size_t)snprintf(out + off, cap - off, "%.*s",
                                   (int)v->as.str->len, v->as.str->chars);
-  case VAL_REF:
-    return off + (size_t)snprintf(out + off, cap - off, "%ld", v->as.u);
+  case VAL_CALLABLE:
   case VAL_ARRAY:
   case VAL_OBJECT:
     // fallthrough
@@ -804,4 +811,38 @@ static void concat_val_as_string(Value *a, Value *b, char **out) {
   off = append_value_as_str(*out, size, off, a);
   off = append_value_as_str(*out, size, off, b);
 }
+
+/*
+ * Loads a shared library and calls init_lib(vm).
+ * uses memcpy isntead of casting because of ISO C standarts
+ * Returns 0 on success, -1 on failure.
+ */
+static bool load_and_push_lib(const char *path, VM *vm) {
+  void *handle;
+  void *sym;
+  init_lib_fn init_lib;
+
+  dlerror();
+
+  handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+  if (!handle) {
+    fprintf(stderr, "dlopen failed: %s\n", dlerror());
+    return false;
+  }
+
+  sym = dlsym(handle, "init_lib");
+  if (!sym) {
+    fprintf(stderr, "dlsym failed: %s\n", dlerror());
+    dlclose(handle);
+    return false;
+  }
+
+  memcpy(&init_lib, &sym, sizeof(init_lib));
+
+  Value res = init_lib(vm);
+  push(vm, res);
+
+  return true;
+}
+
 #endif

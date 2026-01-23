@@ -1,10 +1,10 @@
 #ifndef VM_IMP_H
 #define VM_IMP_H
-#include "vm_builtins.h"
 #include "vm_structs.h"
 #include "vm_utils.h"
 #include <assert.h>
 #include <inttypes.h>
+#include <stdalign.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +37,27 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     break;
   case OP_PUSH_STR: {
     push(vm, (Value){.type = VAL_STR, .as.str = inst.str});
+    vm->ip += 1;
+    break;
+  }
+  case OP_PUSH_FN: {
+    Callable *fn = (Callable *)vm_heap_alloc(&vm->heap, sizeof(Callable),
+                                             alignof(Callable));
+    fn->type = CALLABLE_USER;
+    fn->as.entry_ip = inst.u;
+    push(vm, (Value){.type = VAL_CALLABLE, .as.fn = fn});
+    vm->ip += 1;
+    break;
+  }
+  case OP_LOADDLL: {
+    assert_min_stack(vm, 1);
+    Value libname = pop(vm);
+    ASSERT_TYPE(vm, &libname, VAL_STR);
+    // Automatically pushes library value
+    if (!load_and_push_lib(libname.as.str->chars, vm)) {
+      vm_runtime_errorf(&inst, "Load dll error");
+      return 1;
+    }
     vm->ip += 1;
     break;
   }
@@ -212,7 +233,7 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
   }
 
   case OP_JMP: {
-    vm->ip = inst.ref;
+    vm->ip = inst.u;
     break;
   }
   case OP_JNZ: {
@@ -220,7 +241,7 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     Value v = pop(vm);
     ASSERT_TYPE(vm, &v, VAL_INT);
     if (v.as.i != 0) {
-      vm->ip = inst.ref;
+      vm->ip = inst.u;
     } else {
       vm->ip += 1;
     }
@@ -231,7 +252,7 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     Value v = pop(vm);
     ASSERT_TYPE(vm, &v, VAL_INT);
     if (v.as.i == 0) {
-      vm->ip = inst.ref;
+      vm->ip = inst.u;
     } else {
       vm->ip += 1;
     }
@@ -244,7 +265,7 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     ASSERT_TYPE(vm, &b, VAL_INT);
     ASSERT_TYPE(vm, &a, VAL_INT);
     if (a.as.i < b.as.i) {
-      vm->ip = inst.ref;
+      vm->ip = inst.u;
     } else {
       vm->ip += 1;
     }
@@ -257,7 +278,7 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     ASSERT_TYPE(vm, &b, VAL_INT);
     ASSERT_TYPE(vm, &a, VAL_INT);
     if (a.as.i <= b.as.i) {
-      vm->ip = inst.ref;
+      vm->ip = inst.u;
     } else {
       vm->ip += 1;
     }
@@ -270,7 +291,7 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     ASSERT_TYPE(vm, &b, VAL_INT);
     ASSERT_TYPE(vm, &a, VAL_INT);
     if (a.as.i > b.as.i) {
-      vm->ip = inst.ref;
+      vm->ip = inst.u;
     } else {
       vm->ip += 1;
     }
@@ -284,28 +305,28 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     ASSERT_TYPE(vm, &b, VAL_INT);
     ASSERT_TYPE(vm, &a, VAL_INT);
     if (a.as.i >= b.as.i) {
-      vm->ip = inst.ref;
+      vm->ip = inst.u;
     } else {
       vm->ip += 1;
     }
     break;
   }
   case OP_PICK: {
-    if (vm->sp <= inst.ref) {
+    if (vm->sp <= inst.u) {
       printf("PICK out of range\n");
       exit(1);
     }
-    push(vm, vm->stack[vm->sp - 1 - inst.ref]);
+    push(vm, vm->stack[vm->sp - 1 - inst.u]);
     vm->ip++;
     break;
   }
   case OP_ROT: {
-    if (inst.ref < 2 || vm->sp < inst.ref) {
-      vm_runtime_errorf(&inst, "ROT requires %d values in stack\n", inst.ref);
+    if (inst.u < 2 || vm->sp < inst.u) {
+      vm_runtime_errorf(&inst, "ROT requires %d values in stack\n", inst.u);
     }
 
-    Value first = vm->stack[vm->sp - inst.ref];
-    for (size_t i = vm->sp - inst.ref; i < vm->sp - 1; i++) {
+    Value first = vm->stack[vm->sp - inst.u];
+    for (size_t i = vm->sp - inst.u; i < vm->sp - 1; i++) {
       vm->stack[i] = vm->stack[i + 1];
     }
     vm->stack[vm->sp - 1] = first;
@@ -314,37 +335,37 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     break;
   }
   case OP_LOAD_GLOBAL: {
-    if (inst.ref >= GLOBALS_MAX) {
+    if (inst.u >= GLOBALS_MAX) {
       vm_runtime_errorf(
           &inst, "OP_LOAD_GLOBAL: global index out of range 0<= %ld < %d",
-          inst.ref, GLOBALS_MAX);
+          inst.u, GLOBALS_MAX);
       exit(1);
     }
-    Value copy = vm->globals[inst.ref];
+    Value copy = vm->globals[inst.u];
     push(vm, copy);
     vm->ip += 1;
     break;
   }
   case OP_STORE_GLOBAL: {
     assert_min_stack(vm, 1);
-    if (inst.ref >= GLOBALS_MAX) {
+    if (inst.u >= GLOBALS_MAX) {
       vm_runtime_errorf(
           &inst, "OP_LOAD_GLOBAL: global index out of range 0<= %ld < %d",
-          inst.ref, GLOBALS_MAX);
+          inst.u, GLOBALS_MAX);
     }
 
-    vm->globals[inst.ref] = pop(vm);
+    vm->globals[inst.u] = pop(vm);
     vm->ip += 1;
     break;
   }
   case OP_LOAD: {
     size_t limit = f->argc + f->locals;
-    if (inst.ref >= limit) {
+    if (inst.u >= limit) {
       vm_runtime_errorf(&inst,
                         "OP_LOAD operand should be x>=0 (Overflow/Underflow)");
       exit(1);
     }
-    Value copy = vm->stack[vm->fp + inst.ref];
+    Value copy = vm->stack[vm->fp + inst.u];
     push(vm, copy);
     vm->ip += 1;
     break;
@@ -352,11 +373,11 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
   case OP_STORE: {
     assert_min_stack(vm, 1);
     size_t slot_limit = f->argc + f->locals;
-    if (inst.ref >= slot_limit) {
+    if (inst.u >= slot_limit) {
       vm_runtime_errorf(&inst, "STORE out of frame");
     }
 
-    vm->stack[vm->fp + inst.ref] = pop(vm);
+    vm->stack[vm->fp + inst.u] = pop(vm);
     vm->ip += 1;
     break;
   }
@@ -491,65 +512,67 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
   }
 
   case OP_ENTER: {
-    f->locals = inst.ref;
-    for (size_t i = 0; i < inst.ref; i++)
+    f->locals = inst.u;
+    for (size_t i = 0; i < inst.u; i++)
       push(vm, VM_NIL);
     vm->ip += 1;
     break;
   }
   case OP_CALL: {
-    assert_min_stack(vm, (size_t)inst.argc);
-    if (inst.op_type == VAL_REF) {
-      if (inst.ref >= vm->function_count) {
-        printf("Unkown builtin function call with id %ld\n", inst.ref);
-        exit(1);
-      }
-      BuiltinFunc *fn = &vm->functions[inst.ref];
-      if (inst.argc > -1) {
-        assert_min_stack(vm, (size_t)inst.argc);
-        fn->fn(vm, (int)inst.argc);
-      } else {
-        fn->fn(vm, 0);
-      }
-      vm->ip++;
+    assert(vm->frame_top < CALL_MAX);
+    size_t argc = inst.u;
+    if (argc > 0) {
+      assert_min_stack(vm, argc + 1);
+    }
+    // callable + argc
+    size_t base = vm->sp - (argc + 1);
+
+    Value callee = vm->stack[base];
+    if (callee.type != VAL_CALLABLE) {
+      vm_runtime_errorf(&inst, "Calling a non function");
+    }
+    if (callee.as.fn->type == CALLABLE_NATIVE) {
+      Value res = callee.as.fn->as.native(vm, argc, &vm->stack[base + 1]);
+      vm->sp = base;
+      push(vm, res);
+      vm->ip += 1;
       break;
     }
-    assert(vm->frame_top < CALL_MAX);
+
     // ---- create function frame ----
     vm->frames[vm->frame_top++] = (CallFrame){
         .return_ip = vm->ip + 1,
         .old_fp = vm->fp,
-        .argc = inst.ref,
+        .argc = argc,
         .locals = 0,
     };
-
+    // Remove function value, keep args
+    memmove(&vm->stack[base], &vm->stack[base + 1], argc * sizeof(Value));
+    vm->sp -= 1;
     // Make arguments become locals
-    if (inst.argc < -1) {
-      vm_runtime_errorf(
-          &inst,
-          "Function arity must be equal or greater then -1 , given " PRIi64,
-          inst.argc);
-    }
-    // for locals
-    vm->fp = vm->sp - (size_t)inst.argc;
-    // Jump to function
-    vm->ip = inst.ref;
+    vm->fp = base;
+    vm->ip = callee.as.fn->as.entry_ip;
     break;
   }
   case OP_RET: {
     Value ret;
+    // TODO: make exitCode for halt
     if (vm->frame_top == 1) {
       // Ret from main
-      if (vm->sp < 1) {
-        // no exit code given
-        exit(0);
-      }
-      ret = pop(vm);
-      if (ret.type == VAL_INT) {
-        exit((int)ret.as.i);
-      } else {
-        exit(0);
-      }
+      // if (vm->sp < 1) {
+      //   // no exit code given
+      //   vm->halt = true;
+      // }
+      // ret = pop(vm);
+      // if (ret.type == VAL_INT) {
+      //   if (ret.as.i == 0) {
+      //     vm->halt = true;
+      //
+      //   } else {
+      vm->halt = true;
+
+      // exit((int)ret.as.i);
+      // }
     }
     if (vm->frame_top == 0) {
       vm_runtime_errorf(&inst, "RET must be used in function");
@@ -585,14 +608,6 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
   return 0;
 }
 
-static void register_builtin_fn(VM *vm, char *name, BuiltinFnCb cb) {
-  vm->builtin_map[vm->builtin_count++] =
-      (BuiltinMap){.name = name, .id = vm->function_count};
-  vm->functions[vm->function_count++] = (BuiltinFunc){
-      .name = name,
-      .fn = cb,
-  };
-}
 static void print_inst(const Inst *in) {
   printf("Inst { ");
 
@@ -604,36 +619,10 @@ static void print_inst(const Inst *in) {
   } else {
     printf(", operand=%lld", (long long)in->operand);
   }
-
-  printf(", argc=%lld", (long long)in->argc);
+  if (in->type == OP_CALL) {
+    printf(", argc=%lld", (long long)in->u);
+  }
   printf(" }\n");
-}
-
-static void register_std_lib(VM *vm) {
-  srand((unsigned)time(NULL));
-
-  // Debug
-  register_builtin_fn(vm, "dump_stack", builtin_dump_stack);
-  register_builtin_fn(vm, "exit", builtin_exit);
-  // I/O
-  register_builtin_fn(vm, "cclear", builtin_cclear);
-  register_builtin_fn(vm, "cmove", builtin_cmove);
-  register_builtin_fn(vm, "ccolor", builtin_ccolor);
-  register_builtin_fn(vm, "creset", builtin_creset);
-  register_builtin_fn(vm, "print", builtin_print);
-  register_builtin_fn(vm, "println", builtin_println);
-  register_builtin_fn(vm, "printf", builtin_printf);
-  register_builtin_fn(vm, "read_int", builtin_read_int);
-  register_builtin_fn(vm, "read_line", builtin_read_line);
-  register_builtin_fn(vm, "getchr", builtin_getchr);
-  register_builtin_fn(vm, "msleep", builtin_sleepms);
-  // Math
-  register_builtin_fn(vm, "min", builtin_min);
-  register_builtin_fn(vm, "max", builtin_max);
-  register_builtin_fn(vm, "abs", builtin_abs);
-  register_builtin_fn(vm, "rand", builtin_rand);
-  register_builtin_fn(vm, "rand_range", builtin_rand_range);
-  register_builtin_fn(vm, "clamp", builtin_clamp);
 }
 
 static void vm_run(VM *vm) {

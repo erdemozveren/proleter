@@ -14,6 +14,11 @@
 
 typedef enum { OBJ_STRING = 1, OBJ_ARRAY, OBJ_OBJECT } ObjKind;
 
+typedef struct VM VM;
+typedef struct Value Value;
+typedef struct Array Array;
+typedef struct Object Object;
+
 typedef struct HeapObj {
   uint8_t kind; // stores ObjKind value
   // uint8_t flags; // reserved (GC mark bit later)
@@ -37,21 +42,37 @@ typedef enum {
   VAL_NIL = 0,
   VAL_INT,
   VAL_DOUBLE,
+  VAL_CALLABLE,
   VAL_STR,
   VAL_ARRAY,
   VAL_OBJECT,
-  VAL_REF,
   VAL_TYPE_END
 } ValueType;
 
-typedef struct Array Array;
-typedef struct Object Object;
+typedef enum {
+  CALLABLE_NATIVE,
+  CALLABLE_USER,
+} CallableType;
+
+typedef Value (*init_lib_fn)(VM *vm);
+
+typedef Value (*NativeFn)(VM *vm, size_t argc, Value *argv);
+
 typedef struct {
+  const char *name;
+  CallableType type;
+  union {
+    NativeFn native;
+    size_t entry_ip;
+  } as;
+} Callable;
+typedef struct Value {
   ValueType type;
   union {
     String *str;
     Array *arr;
     Object *obj;
+    Callable *fn;
     int64_t i;
     size_t u;
     double d;
@@ -77,13 +98,6 @@ typedef struct Object {
   ObjEntry *entries;
   struct Object *proto; // optional, can be NULL
 } Object;
-
-typedef struct VM VM;
-typedef void (*BuiltinFnCb)(VM *vm, int argc);
-typedef struct {
-  const char *name;
-  BuiltinFnCb fn;
-} BuiltinFunc;
 
 typedef struct {
   const char *name;
@@ -122,6 +136,7 @@ typedef enum {
   OP_PUSH_INT,
   OP_PUSH_DOUBLE,
   OP_PUSH_STR,
+  OP_PUSH_FN,
 
   OP_ADD,
   OP_SUB,
@@ -177,19 +192,19 @@ typedef enum {
   OP_RET,
   OP_RET_VOID,
 
+  OP_LOADDLL,
+
   OP_HALT,
 } OpCode;
 
 typedef struct {
   union {
     int64_t operand;
-    size_t ref;
+    size_t u;
     double d;
     String *str;
   };
   OpCode type;
-  ValueType op_type;
-  int64_t argc;
   size_t soure_line_num;
 } Inst;
 
@@ -202,11 +217,9 @@ struct VM {
   Value stack[STACK_MAX];
   Value globals[GLOBALS_MAX];
   Program *program;
-  BuiltinFunc functions[FN_MAX];
   CallFrame frames[CALL_MAX];
   BuiltinMap builtin_map[FN_MAX];
   Heap heap;
-  size_t function_count;
   size_t builtin_count;
   size_t symbol_count;
   size_t frame_top;

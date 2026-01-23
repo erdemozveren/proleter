@@ -14,6 +14,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "vm.h"
 #include "vm_structs.h"
 #include "vm_utils.h"
 /* ================= helpers ================= */
@@ -243,6 +244,7 @@ static OpMap ops[] = {
     {"pushs", OP_PUSH_STR},
     {"pushd", OP_PUSH_DOUBLE},
     {"pushnil", OP_PUSH_NIL},
+    {"pushfn", OP_PUSH_FN},
     {"add", OP_ADD},
     {"sub", OP_SUB},
     {"mul", OP_MUL},
@@ -290,6 +292,7 @@ static OpMap ops[] = {
     {"len", OP_LEN},
     {"ret", OP_RET},
     {"ret_void", OP_RET_VOID},
+    {"loaddll", OP_LOADDLL},
     {"halt", OP_HALT},
 };
 
@@ -304,16 +307,6 @@ static int find_op(const char *s, OpCode *out) {
 }
 
 /* ================= label/named builtins syntax ================= */
-
-static size_t find_builtin_or_die(VM *vm, const char *name, const char *path,
-                                  size_t line) {
-  for (size_t i = 0; i < vm->builtin_count; i++) {
-    if (strcmp(vm->builtin_map[i].name, name) == 0)
-      return vm->builtin_map[i].id;
-  }
-  vm_compile_errorf(path, line, "Unknown builtin \"%s\"", name);
-  return 0;
-}
 
 static bool is_label(const char *s, StrBuf *out) {
   const char *p = s;
@@ -370,8 +363,7 @@ static Inst *load_program(VM *vm, const char *path) {
 
   label_count = 0;
 
-  // Min 2 instrucitons for call main and halt
-  size_t ip = 2;
+  size_t ip = 0;
   size_t line = 1;
 
   /* ======================================================
@@ -437,13 +429,6 @@ static Inst *load_program(VM *vm, const char *path) {
            " ret\n");
     exit(1);
   }
-  // Main Program Call
-  code[pc++] =
-      (Inst){.ref = label_ip(path, 0, "main"), .type = OP_CALL, .argc = 0};
-  code[pc++] = (Inst){
-      .ref = 0,
-      .type = OP_HALT,
-  };
 
   for (char *p = source; *p;) {
     char *line_start = p;
@@ -489,6 +474,12 @@ static Inst *load_program(VM *vm, const char *path) {
       if (!a)
         vm_compile_errorf(path, line, "missing operand for \"%s\"", op_s);
       in.operand = strtoll(a, NULL, 10);
+    } else if (op == OP_PUSH_FN) {
+      char *t = strtok(NULL, " \t");
+      if (!t)
+        vm_compile_errorf(path, line, "%s needs label", op_s);
+
+      in.u = label_ip(path, line, t);
     } else if (op == OP_PUSH_DOUBLE) {
       char *a = strtok(NULL, " \t");
       if (!a)
@@ -509,38 +500,17 @@ static Inst *load_program(VM *vm, const char *path) {
         vm_compile_errorf(path, line, "%s operand must be less then %d", op_s,
                           number);
       }
-      in.ref = (size_t)number;
+      in.u = (size_t)number;
     } else if (op == OP_CALL) {
-      char *t = strtok(NULL, " \t");
       char *a = strtok(NULL, " \t");
-
-      if (!t)
-        vm_compile_errorf(path, line, "CALL <target> <argc?>");
-
       if (!a) {
-        in.argc = 0;
+        in.u = 0;
       } else {
-        in.argc = strtoll(a, NULL, 10);
-      }
-      /* builtin: $id or $name */
-      if (t[0] == '$') {
-        const char *key = t + 1;
-        in.op_type = VAL_REF;
-
-        if (isdigit((unsigned char)key[0])) {
-          long number = strtoll(key, NULL, 10);
-          if (number < 0) {
-            vm_compile_errorf(path, line,
-                              "Ref ids must be a positive number %ld", number);
-          }
-          in.ref = (size_t)number;
-        } else {
-          in.ref = find_builtin_or_die(vm, key, path, line);
+        long parse = strtoll(a, NULL, 10);
+        if (parse < 0) {
+          vm_compile_errorf(path, line, "Call arity must be zero or greater");
         }
-      } else {
-        /* user code: label (absolute IP) */
-        in.ref = label_ip(path, line, t);
-        in.op_type = VAL_INT;
+        in.u = (size_t)parse;
       }
     } else if (op == OP_JZ || op == OP_JNZ || op == OP_JL || op == OP_JLE ||
                op == OP_JGT || op == OP_JGTE || op == OP_JMP) {
@@ -550,7 +520,7 @@ static Inst *load_program(VM *vm, const char *path) {
         vm_compile_errorf(path, line, "jump needs label for %s", op_s);
 
       size_t target = label_ip(path, line, t);
-      in.ref = target;
+      in.u = target;
     } else if (op == OP_PUSH_STR) {
       char *strbuf = NULL;
       while (!is_eol_or_eof(*s) && *s != '"') {
@@ -570,7 +540,7 @@ static Inst *load_program(VM *vm, const char *path) {
       if (amount < 2) {
         vm_compile_errorf(path, line, "%s operand must be GTE than 2", op_s);
       }
-      in.ref = (size_t)amount;
+      in.u = (size_t)amount;
     }
 
     code[pc++] = in;
