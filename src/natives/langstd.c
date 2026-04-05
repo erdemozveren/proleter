@@ -239,7 +239,7 @@ static Value builtin_printf(VM *vm, size_t argc, Value *argv) {
 
   Value fmtv = argv[0];
   if (fmtv.type != VAL_STR) {
-    printf("<printf error: format not string>");
+    printf("<printf error: format not string>\n");
     return VM_NIL;
   }
 

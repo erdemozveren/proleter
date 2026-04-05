@@ -526,13 +526,13 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
     }
     // callable + argc
     size_t base = vm->sp - (argc + 1);
-
+    size_t argv_sp = base + 1;
     Value callee = vm->stack[base];
     if (callee.type != VAL_CALLABLE) {
       vm_runtime_errorf(&inst, "Calling a non function");
     }
     if (callee.as.fn->type == CALLABLE_NATIVE) {
-      Value res = callee.as.fn->as.native(vm, argc, &vm->stack[base + 1]);
+      Value res = callee.as.fn->as.native(vm, argc, &vm->stack[argv_sp]);
       vm->sp = base;
       push(vm, res);
       vm->ip += 1;
@@ -547,7 +547,9 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
         .locals = 0,
     };
     // Remove function value, keep args
-    memmove(&vm->stack[base], &vm->stack[base + 1], argc * sizeof(Value));
+    if (argc > 0) {
+      memmove(&vm->stack[base], &vm->stack[argv_sp], argc * sizeof(Value));
+    }
     vm->sp -= 1;
     // Make arguments become locals
     vm->fp = base;
