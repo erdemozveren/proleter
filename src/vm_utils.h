@@ -536,7 +536,7 @@ static void vm_object_grow(VM *vm, Object *o, size_t needed_size) {
         &vm->heap, needed_size * sizeof(ObjEntry), alignof(ObjEntry));
 
     if (o->entries) {
-      memcpy(new_entries, o->entries, o->len * sizeof(ObjEntry));
+      memmove(new_entries, o->entries, o->len * sizeof(ObjEntry));
     }
 
     o->entries = new_entries;
@@ -620,8 +620,7 @@ static void vm_array_grow(VM *vm, Array *a, size_t needed_size) {
 
     Value *new_items =
         vm_heap_alloc(&vm->heap, needed_size * sizeof(Value), alignof(Value));
-
-    memcpy(new_items, a->items, a->len * sizeof(Value));
+    memmove(new_items, a->items, a->len * sizeof(Value));
 
     a->items = new_items;
     a->cap = needed_size;
@@ -837,7 +836,7 @@ static bool load_and_push_lib(const char *path, VM *vm) {
     return false;
   }
 
-  memcpy(&init_lib, &sym, sizeof(init_lib));
+  memmove(&init_lib, &sym, sizeof(init_lib));
 
   Value res = init_lib(vm);
   push(vm, res);
