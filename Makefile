@@ -9,13 +9,13 @@ vm: src/vm.h | build
 	$(CC) $(CFLAGS) $(RELEASE_FLAGS) src/vm.h -o build/vm.o
 
 bindings:
-	gcc -fPIC -shared ./src/natives/langstd.c -o build/libmystd.so
+	@gcc -fPIC -shared ./src/natives/langstd.c -o build/libmystd.so
 
 debug: bindings src/main.c| build
-	$(CC) $(CFLAGS) $(DEBUG_FLAGS) src/main.c -o build/vm
+	@$(CC) $(CFLAGS) $(DEBUG_FLAGS) src/main.c -o build/vm
 
 build:
-	mkdir -p build
+	@mkdir -p build
 
 clean:
-	rm -rf build
+	@rm -rf build

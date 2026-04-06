@@ -34,6 +34,8 @@ main:
   loadg 1
   pushi 1
   array_get
+  # or just use jump
+  #jmp println
   pushfn println
   swap
   call 1

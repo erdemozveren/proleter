@@ -14,7 +14,6 @@
 #include <string.h>
 #include <time.h>
 
-#include "vm.h"
 #include "vm_structs.h"
 #include "vm_utils.h"
 /* ================= helpers ================= */
