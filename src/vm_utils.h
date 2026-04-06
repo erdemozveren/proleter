@@ -605,26 +605,31 @@ static Value vm_array_new(VM *vm, size_t initial_cap) {
 
   a->h.kind = OBJ_ARRAY;
   a->h.size = sizeof(Array);
-  a->len = initial_cap;
+  a->len = 0;
   a->cap = initial_cap;
-
-  a->items =
-      vm_heap_alloc(&vm->heap, initial_cap * sizeof(Value), alignof(Value));
+  if (initial_cap == 0) {
+    a->items = NULL;
+  } else {
+    a->items =
+        vm_heap_alloc(&vm->heap, initial_cap * sizeof(Value), alignof(Value));
+  }
 
   return (Value){.type = VAL_ARRAY, .as.arr = a};
 }
 
 static void vm_array_grow(VM *vm, Array *a, size_t needed_size) {
   assert(needed_size != 0);
-  if (needed_size >= a->cap) {
+  if (needed_size > a->cap) {
 
     Value *new_items =
         vm_heap_alloc(&vm->heap, needed_size * sizeof(Value), alignof(Value));
-    memmove(new_items, a->items, a->len * sizeof(Value));
+
+    if (a->items) {
+      memmove(new_items, a->items, a->len * sizeof(Value));
+    }
 
     a->items = new_items;
     a->cap = needed_size;
-    a->len = needed_size;
     a->h.size = sizeof(Array) + a->cap * sizeof(Value);
 
     // old buffer becomes garbage (GC later)
@@ -637,7 +642,6 @@ static void vm_array_push(VM *vm, Array *a, Value v) {
     vm_array_grow(vm, a, new_cap);
     // old buffer becomes garbage (GC later)
   }
-
   a->items[a->len++] = v;
 }
 

@@ -1,19 +1,43 @@
+pushfn main
+call 0
+halt
+
+println:
+  loadg 0
+  pushs "printf"
+  object_get
+  load 0
+  load 1
+  call 2
+  ret_void
+
 main:
+  enter 1
+  pushs "./build/libmystd.so"
+  loaddll
+  storeg 0
+  pushfn println
   object_new
+  dup
+  store 0
   pushs "x"
   pushi 15
   object_set
-  dup
+  pushs "X should be 15 => %d\n"
+  swap
   pushs "x"
   object_get
-  pushs "X should be 15 => "
+  call 2
+  pushfn println
   swap
-  call $println 2
-  pop
   pushs "x"
   object_del
-  pushs "Key deleted, Object length must be 0 => "
-  swap
   object_len
-  call $println 2
+  pushs "Key deleted, Object length must be 0 => %d\n"
+  swap
+  call 2
+  pushi 0
   ret
+
+
+

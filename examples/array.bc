@@ -1,15 +1,41 @@
-main:
-  array_new
-  storeg 0
+pushfn main
+call 0
+halt
+
+println:
   loadg 0
+  pushs "println"
+  object_get
+  swap
+  call 1
+  ret_void
+
+main:
+  pushs "./build/libmystd.so"
+  loaddll
+  storeg 0
+  pushi 0
+  array_new
+  storeg 1
+  loadg 1
   pushi 10
   array_push
   pushi 20
   array_push
-  array_len
-  call $println 1
-  loadg 0
+  pushfn println
+  swap
+  loadg 1
   pushi 0
   array_get
-  call $println 1
+  pushfn println
+  swap
+  call 1
+  pushfn println
+  loadg 1
+  pushi 1
+  array_get
+  pushfn println
+  swap
+  call 1
+  pushi 0
   ret

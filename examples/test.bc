@@ -2,10 +2,14 @@ pushfn main
 call 0
 halt
 
-testfn:
-pushi 2
-add
-ret
+println:
+  loadg 0
+  pushs "printf"
+  object_get
+  load 0
+  load 1
+  call 2
+  ret_void
 
 main:
   pushs "./build/libmystd.so"
