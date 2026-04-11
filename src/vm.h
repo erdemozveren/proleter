@@ -493,10 +493,10 @@ static int vm_inst_execute(VM *vm, const Inst inst) {
       vm_runtime_errorf(&inst, "array_set index out of bounds, idx:%i len:%d",
                         index.as.i, arr.as.arr->len);
     }
-    if (index.as.i >= (int64_t)arr.as.arr->len) {
-      vm_array_grow(vm, arr.as.arr, index.as.u * 2);
-    }
-    arr.as.arr->items[index.as.u] = v;
+    vm_array_set(vm, arr.as.arr, index.as.u, v);
+    // if (index.as.u > arr.as.arr->len) {
+    //   arr.as.arr->len = index.as.u + 1;
+    // }
     push(vm, arr);
     vm->ip += 1;
 

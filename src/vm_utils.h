@@ -617,7 +617,7 @@ static Value vm_array_new(VM *vm, size_t initial_cap) {
   return (Value){.type = VAL_ARRAY, .as.arr = a};
 }
 
-static void vm_array_grow(VM *vm, Array *a, size_t needed_size) {
+static void vm_array_grow_capacity(VM *vm, Array *a, size_t needed_size) {
   assert(needed_size != 0);
   if (needed_size > a->cap) {
 
@@ -636,10 +636,23 @@ static void vm_array_grow(VM *vm, Array *a, size_t needed_size) {
   }
 }
 
+static void vm_array_set(VM *vm, Array *a, size_t index, Value v) {
+  if (index >= a->cap) {
+    size_t new_cap = a->cap ? a->cap * 2 : 4;
+    vm_array_grow_capacity(vm, a, new_cap);
+    // old buffer becomes garbage (GC later)
+  }
+  if (index >= a->len) {
+    // if its adds a new elements
+    a->len++;
+  }
+  a->items[index] = v;
+}
+
 static void vm_array_push(VM *vm, Array *a, Value v) {
   if (a->len >= a->cap) {
-    size_t new_cap = a->cap ? a->cap * 2 : 8;
-    vm_array_grow(vm, a, new_cap);
+    size_t new_cap = a->cap ? a->cap * 2 : 4;
+    vm_array_grow_capacity(vm, a, new_cap);
     // old buffer becomes garbage (GC later)
   }
   a->items[a->len++] = v;
