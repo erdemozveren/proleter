@@ -1,15 +1,27 @@
+pushfn main
+call 0
+halt
+
+
 main:
+  pushs "./build/libmystd.so"
+  loaddll
+  storeg 0
   enter 2 # reserve 2 slot
-  pushi 10
+  pushfn fib
+  pushi 20
   dup
   store 0 # n is in slot 0
-  call fib 1
-  store 1 # result in slot 1
+  call 1
+  store 1 # result in slot 1 (should be 6765 for fib 20)
+  loadg 0
+  pushs "println"
+  object_get
   pushs "fib("
   load 0
   pushs ") = "
   load 1
-  call $println 4
+  call 4
   ret_void
 
 # ======================
@@ -24,16 +36,18 @@ lte
 jnz base
 
 # fib(n - 1)
+pushfn fib
 load 0
 pushi 1
 sub
-call fib 1
+call 1
 
 # fib(n - 2)
+pushfn fib
 load 0
 pushi 2
 sub
-call fib 1
+call 1
 
 # add results
 add

@@ -6,15 +6,17 @@
 # Globals (storeg/loadg):
 #   g0 = WIDTH
 #   g1 = HEIGHT
-#   g2 = SIZE = WIDTH * HEIGHT
+#   g2 = SIZE (width*height)
+#   g3 = stdlib obj
 #
-# Builtins:
-#   call $cclear 0
-#   call $cmove 2     (x,y)
-#   call $ccolor 2    (fg,bg)
-#   call $creset 0
-#   call $getchr 0   (returns key -> popped)
-#   call $print 1
+# local fn:
+#   cclear 0
+# Stdlib:
+#   cmove 2     (x,y)
+#   ccolor 2    (fg,bg)
+#   creset 0
+#   getchr 0   (returns key -> popped)
+#   print 1
 #
 # Arrays:
 #   array_new expects size on stack and PREALLOCs
@@ -22,14 +24,29 @@
 #   array_set: [arr, idx, value] -> arr (we pop after set)
 # ============================================================
 
+pushfn main
+call 0
+halt
+
+cclear:
+  loadg 3
+  pushs "cclear"
+  object_get
+  call 0
+  ret_void
+
 main:
+  enter 13
+  pushs "./build/libmystd.so"
+  loaddll
+  storeg 3
   enter 15
   # locals:
   # 0=cur, 1=next,
   # 2=y, 3=x, 4=idx, 5=count, 6=cell,
   # 7=ny, 8=nx, 9=nidx,
   # 10=tmpy, 11=tmpx,
-  # 12=i (for init/copy), 13=t, 14=unused/scratch
+  # 12=i (for init/copy), 13=t,
 
   # --------------------
   # Set globals: WIDTH/HEIGHT (edit these two only)
@@ -157,12 +174,17 @@ init_done:
 # FRAME LOOP (INFINITE)
 # ============================================================
 frame_loop:
-  call $cclear 0
-
+  pushfn cclear
+  call 0
+  pop
   # move cursor to 0,0
+  loadg 3
+  pushs "cmove"
+  object_get
   pushi 0
   pushi 0
-  call $cmove 2
+  call 2
+  pop
 
   # --------------------
   # PRINT GRID (colored live cells)
@@ -177,9 +199,12 @@ print_y:
   jz print_done
 
   # cmove(0,y)
+  loadg 3
+  pushs "cmove"
+  object_get
   pushi 0
   load 2
-  call $cmove 2
+  call 2
 
   pushi 0
   store 3           # x=0
@@ -210,18 +235,35 @@ print_x:
   eq
   jz print_dead
 
+
+  loadg 3
+  pushs "ccolor"
+  object_get
   pushi 2           # fg green
   pushi 0           # bg black
-  call $ccolor 2
+  call 2
+  pop
 
+  loadg 3
+  pushs "print"
+  object_get
   pushs "1"
-  call $print 1
-  call $creset 0
+  call 1
+  pop
+  loadg 3
+  pushs "creset"
+  object_get
+  call 0
+  pop
   jmp print_next
 
 print_dead:
+  loadg 3
+  pushs "print"
+  object_get
   pushs "0"
-  call $print 1
+  call 1
+  pop
 
 print_next:
   load 3
@@ -239,10 +281,17 @@ print_row_end:
 
 print_done:
   # getchr (step-by-step)
-  #call $getchr 0
+  #loadg 3
+  #pushs "msleep"
+  #object_get
+  #call 0
   #pop
-  pushi 50
-  call $msleep 1
+  loadg 3
+  pushs "msleep"
+  object_get
+  pushi 30
+  call 1
+  pop
   # --------------------
   # COMPUTE NEXT (TORUS WRAP)
   # --------------------

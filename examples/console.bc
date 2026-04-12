@@ -1,28 +1,68 @@
+pushfn main
+call 0
+halt
+
+
 main:
+  pushs "./build/libmystd.so"
+  loaddll
+  storeg 0
+  loadg 0
+  pushs "println"
+  object_get
   pushs "asdasd"
-  call $println 1
-  call $cclear 0
+  call 1
+  pop
+  loadg 0
+  pushs "cclear"
+  object_get
+  call 0
+  pop
+  loadg 0
+  pushs "cmove"
+  object_get
   pushi 10
   pushi 3
-  call $cmove 2
+  call 2
+  pop
 
+  loadg 0
+  pushs "ccolor"
+  object_get
   pushi 2   # green
   pushi 0   # black
-  call $ccolor 2
+  call 2
+  pop
 
+  loadg 0
+  pushs "println"
+  object_get
   pushs "Hello VM!"
-  call $println 1
+  call 1
+  pop
+  loadg 0
+  pushs "println"
+  object_get
   pushs "Line1\nLine2"
-  call $println 1
+  call 1
+  pop
+  loadg 0
+  pushs "printf"
+  object_get
   pushs "This is a shows printf usage\nD : %d \nS: %s\n"
   pushi 35
   pushs "Text123"
-  call $printf 3
+  call 3
+  pop
+  loadg 0
+  pushs "printf"
+  object_get
   pushs "STRING 1 "
   pushs "STRING 2"
   concat
   pushs "STRING 3\n"
   concat
-  call $printf 1
-  #call $creset 0
+  call 1
+  pop
+  pushi 0
   ret

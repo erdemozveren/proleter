@@ -1,6 +1,12 @@
+pushfn main
+call 0
+halt
+
 main:
   enter 4        # slot0 = x, slot1 = y, slot2 = key, slot3 = GRID_SIZE
-
+  pushs "./build/libmystd.so"
+  loaddll
+  storeg 0
   # x 
   pushi 5
   store 0
@@ -14,21 +20,41 @@ main:
   store 3
 
 loop:
-  call $cclear 0
+  loadg 0
+  pushs "cclear"
+  object_get
+  call 0
+  pop
   # draw #
+  loadg 0
+  pushs "cmove"
+  object_get
   load 0
   load 1
-  call $cmove 2
+  call 2
+  pop
 
+  loadg 0
+  pushs "print"
+  object_get
   pushs "#"
-  call $print 1
+  call 1
+  pop
 
+  loadg 0
+  pushs "cmove"
+  object_get
   pushi 0
   pushi 0
-  call $cmove 2
+  call 2
+  pop
 
   # key = getchr()
-  call $getchr 0
+
+  loadg 0
+  pushs "getchr"
+  object_get
+  call 0
   store 2
 
   # if key == 'q' -> end
@@ -93,23 +119,36 @@ move_right:
   jmp clamp_xy
 
 clamp_xy:
+  loadg 0
+  pushs "clamp"
+  object_get
   load 0
   pushi 1
   load 3
-  call $clamp 3
+  call 3
   store 0
 
+  loadg 0
+  pushs "clamp"
+  object_get
   load 1
   pushi 1
   load 3
-  call $clamp 3
+  call 3
   store 1
 
   jmp loop
 
 # ======================
 end:
-  call $cclear 0
+  loadg 0
+  dup
+  pushs "cclear"
+  object_get
+  call 0
+  pop
+  pushs "print"
+  object_get
   pushs "bye\n"
-  call $print 1
+  call 1
   ret_void
