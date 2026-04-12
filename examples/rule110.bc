@@ -24,7 +24,7 @@ main:
   store 7
 
   # width = 50
-  pushi 70
+  pushi 50
   store 0
 
   # cells = new int[width]
@@ -66,9 +66,9 @@ init_loop:
 
 init_done:
 
-  # single 1 in the somewhere at top right: cells[55] = 1
+  # single 1 at top right: cells[49] = 1
   load 1
-  pushi 55
+  pushi 49
   pushi 1
   array_set
   pop
@@ -97,9 +97,17 @@ print_loop:
   load 1
   load 3
   array_get
+  jz print_empty_space
+  pushi 1
+  call 1
+  pop
+  jmp print_continue
+print_empty_space:
+  pushs " "
   call 1
   pop
 
+print_continue:
   load 3
   pushi 1
   add
@@ -111,7 +119,7 @@ print_done:
   loadg 0
   pushs "println"
   object_get
-  pushi 0
+  pushs ""
   call 1     # newline placeholder
   pop
 
