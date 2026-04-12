@@ -2,21 +2,29 @@
 # Rule 110 test program
 # ============================================================
 
+pushfn main
+call 0
+halt
+
 # ======================
 # main
 # ======================
 main:
   enter 8            # 0=width, 1=cells, 2=next, 3=i, 4=left, 5=right, 6=step, 7=maxSteps
+  enter 13
+  pushs "./build/libmystd.so"
+  loaddll
+  storeg 0
 # step = 0
   pushi 0
   store 6
 
 # maxSteps 
-  pushi 20
+  pushi 50
   store 7
 
-  # width = 32
-  pushi 32
+  # width = 50
+  pushi 70
   store 0
 
   # cells = new int[width]
@@ -58,9 +66,9 @@ init_loop:
 
 init_done:
 
-  # single 1 in the middle: cells[16] = 1
+  # single 1 in the somewhere at top right: cells[55] = 1
   load 1
-  pushi 16
+  pushi 55
   pushi 1
   array_set
   pop
@@ -82,11 +90,15 @@ print_loop:
   load 0
   lt
   jz print_done
-
+  
+  loadg 0
+  pushs "print"
+  object_get
   load 1
   load 3
   array_get
-  call $print 1
+  call 1
+  pop
 
   load 3
   pushi 1
@@ -96,8 +108,12 @@ print_loop:
   jmp print_loop
 
 print_done:
+  loadg 0
+  pushs "println"
+  object_get
   pushi 0
-  call $println 1     # newline placeholder
+  call 1     # newline placeholder
+  pop
 
   # compute next
   pushi 0
@@ -153,12 +169,13 @@ no_right:
   # stack must be [array, index, value] for array_set
   load 2            # next (array)
   load 3            # i (index)
+  pushfn rule110
   load 4            # left
   load 1            # cells
   load 3            # i
   array_get         # cells[i]
   load 5            # right
-  call rule110 3    # -> value
+  call 3    # -> value
   array_set
   pop               # discard returned array
 
