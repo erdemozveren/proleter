@@ -1,0 +1,451 @@
+{
+  function loc() {
+    const l = location();
+    return {
+      start: {
+        offset: l.start.offset,
+        line: l.start.line,
+        column: l.start.column
+      },
+      end: {
+        offset: l.end.offset,
+        line: l.end.line,
+        column: l.end.column
+      }
+    };
+  }
+
+  function withLoc(node) {
+    node.loc = loc();
+    return node;
+  }
+
+  function bin(op, left, right) {
+    return withLoc({ type: "Binary", op, left, right });
+  }
+
+  function clone(node) {
+    return JSON.parse(JSON.stringify(node));
+  }
+
+  function assign(target, expr) {
+    return withLoc({ type: "Assign", target, expr });
+  }
+
+  function incDecExpr(target, op) {
+    const deltaOp = op === "++" ? "+" : "-";
+    return assign(
+      target,
+      bin(deltaOp, clone(target), withLoc({ type: "Int", value: 1 }))
+    );
+  }
+
+  function compoundAssign(target, op, rhs) {
+    return assign(target, bin(op, clone(target), rhs));
+  }
+
+  function chain(first, rest) {
+    return rest.reduce((acc, r) => bin(r.op, acc, r.rhs), first);
+  }
+
+  function blockOf(body) {
+    return withLoc({ type: "Block", body: body || [] });
+  }
+}
+
+/* ================= ENTRY ================= */
+
+Program
+  = _ body:ScopeItem* _ {
+      return withLoc({ type: "Program", body });
+    }
+
+/* ================= SHARED SCOPE ================= */
+
+ScopeItem
+  = Function
+  / Statement
+
+/* ================= FUNCTIONS ================= */
+
+Function
+  = "func" __ name:Identifier _ "(" _ params:Params? _ ")" _ ret:ReturnType? _ body:Block {
+      return withLoc({
+        type: "Function",
+        name,
+        params: params || [],
+        returnType: ret || null,
+        body
+      });
+    }
+
+Params
+  = head:Param tail:(_ "," _ Param)* {
+      return [head, ...tail.map(t => t[3])];
+    }
+
+Param
+  = name:Identifier _ ":" _ varType:Type {
+      return withLoc({ type: "Param", name, varType });
+    }
+
+ReturnType
+  = t:Type { return t; }
+
+/* ================= TYPES ================= */
+
+Type
+  = elementType:BaseType dims:(_ "[" _ size:Integer? _ "]")+ {
+      return withLoc({
+        type: "ArrayType",
+        elementType,
+        dims: dims.map(d => d[3] == null ? null : d[3].value)
+      });
+    }
+  / BaseType
+
+BaseType
+  = name:Identifier {
+      return withLoc({ type: "Type", name });
+    }
+
+/* ================= BLOCK ================= */
+
+Block
+  = "{" _ body:ScopeItem* "}" _ {
+      return blockOf(body);
+    }
+
+/* ================= STATEMENTS ================= */
+
+Statement
+  = VarDecl
+  / IfStmt
+  / WhileStmt
+  / ForStmt
+  / BreakStmt
+  / ContinueStmt
+  / ReturnStmt
+  / AsmStmt
+  / AssignStmt
+  / ExprStmt
+
+AsmStmt
+  = "@asm" _ "(" _ code:String _ ")" _ ";" _ {
+      return withLoc({
+        type: "AsmStmt",
+        code: code.value
+      });
+    }
+
+VarDecl
+  = "var" __ name:Identifier _ typeAnn:VarTypeAnn? _ init:Initializer? ";" _ {
+      return withLoc({
+        type: "VarDecl",
+        name,
+        varType: typeAnn || null,
+        expr: init || null
+      });
+    }
+
+VarTypeAnn
+  = ":" _ t:Type { return t; }
+
+Initializer
+  = "=" _ expr:Expression { return expr; }
+
+AssignStmt
+  = target:LValue _ "=" _ expr:Expression ";" _ {
+      return assign(target, expr);
+    }
+  / target:LValue _ op:("+=" / "-=" / "*=" / "/=" / "%=") _ expr:Expression ";" _ {
+      return compoundAssign(target, op[0], expr);
+    }
+  / target:LValue _ op:("++" / "--") ";" _ {
+      return incDecExpr(target, op);
+    }
+
+IfStmt
+  = "if" _ "(" _ cond:Expression _ ")" _ thenBlock:Block elsePart:(_ "else" _ (IfStmt / Block))? {
+      return withLoc({
+        type: "If",
+        cond,
+        then: thenBlock,
+        else: elsePart ? elsePart[3] : null
+      });
+    }
+
+WhileStmt
+  = "while" _ "(" _ cond:Expression _ ")" _ body:Block {
+      return withLoc({ type: "While", cond, body });
+    }
+
+ForStmt
+  = "for" _ "(" _
+      init:ForInit? _ ";" _
+      cond:Expression? _ ";" _
+      step:Expression? _
+    ")" _ body:Block {
+      return withLoc({
+        type: "For",
+        init: init || null,
+        cond: cond || null,
+        step: step || null,
+        body
+      });
+    }
+
+ForInit
+  = VarDeclFor
+  / AssignExpr
+  / Expression
+
+VarDeclFor
+  = "var" __ name:Identifier _ typeAnn:VarTypeAnn? _ init:Initializer? {
+      return withLoc({
+        type: "VarDecl",
+        name,
+        varType: typeAnn || null,
+        expr: init || null
+      });
+    }
+
+BreakStmt
+  = "break" _ ";" _ {
+      return withLoc({ type: "Break" });
+    }
+
+ContinueStmt
+  = "continue" _ ";" _ {
+      return withLoc({ type: "Continue" });
+    }
+
+ReturnStmt
+  = "return" _ expr:Expression? ";" _ {
+      return withLoc({ type: "Return", expr: expr || null });
+    }
+
+ExprStmt
+  = expr:Expression ";" _ {
+      return withLoc({ type: "ExprStmt", expr });
+    }
+
+/* ================= EXPRESSIONS ================= */
+
+Expression
+  = AssignExpr
+
+AssignExpr
+  = target:LValue _ "=" _ rhs:AssignExpr {
+      return assign(target, rhs);
+    }
+  / target:LValue _ op:("+=" / "-=" / "*=" / "/=" / "%=") _ rhs:AssignExpr {
+      return compoundAssign(target, op[0], rhs);
+    }
+  / LogicalOr
+
+LogicalOr
+  = left:LogicalAnd rest:(_ "||" _ LogicalAnd)* {
+      return chain(left, rest.map(r => ({ op: "||", rhs: r[3] })));
+    }
+
+LogicalAnd
+  = left:Equality rest:(_ "&&" _ Equality)* {
+      return chain(left, rest.map(r => ({ op: "&&", rhs: r[3] })));
+    }
+
+Equality
+  = left:Comparison rest:(_ op:("==" / "!=") _ Comparison)* {
+      return chain(left, rest.map(r => ({ op: r[1], rhs: r[3] })));
+    }
+
+Comparison
+  = left:Additive rest:(_ op:("<=" / ">=" / "<" / ">") _ Additive)* {
+      return chain(left, rest.map(r => ({ op: r[1], rhs: r[3] })));
+    }
+
+Additive
+  = left:Multiplicative rest:(_ op:("+" / "-") _ Multiplicative)* {
+      return chain(left, rest.map(r => ({ op: r[1], rhs: r[3] })));
+    }
+
+Multiplicative
+  = left:Unary rest:(_ op:("*" / "/" / "%") _ Unary)* {
+      return chain(left, rest.map(r => ({ op: r[1], rhs: r[3] })));
+    }
+
+Unary
+  = op:("!" / "-") _ expr:Unary {
+      return withLoc({ type: "Unary", op, expr });
+    }
+  / op:("++" / "--") _ target:LValue {
+      return incDecExpr(target, op);
+    }
+  / Postfix
+
+Postfix
+  = base:Primary suffixes:PostfixSuffix* {
+      let node = base;
+      for (const s of suffixes) {
+        if (s.type === "MemberSuffix") {
+          node = withLoc({ type: "Member", object: node, property: s.property });
+        } else if (s.type === "CallSuffix") {
+          node = withLoc({ type: "Call", callee: node, args: s.args });
+        } else if (s.type === "IndexSuffix") {
+          node = withLoc({ type: "Index", object: node, index: s.index });
+        } else if (s.type === "PostfixIncDec") {
+          node = incDecExpr(node, s.op);
+        }
+      }
+      return node;
+    }
+
+PostfixSuffix
+  = _ "." _ property:Identifier {
+      return { type: "MemberSuffix", property };
+    }
+  / _ "(" _ args:Arguments? _ ")" {
+      return { type: "CallSuffix", args: args || [] };
+    }
+  / _ "[" _ index:Expression _ "]" {
+      return { type: "IndexSuffix", index };
+    }
+  / _ op:("++" / "--") {
+      return { type: "PostfixIncDec", op };
+    }
+
+/* ================= PRIMARY ================= */
+
+Primary
+  = ImportExpr
+  / Literal
+  / IdentifierExpr
+  / "(" _ expr:Expression _ ")" { return expr; }
+
+ImportExpr
+  = "@import" _ "(" _ path:String _ ")" {
+      return withLoc({ type: "ImportExpr", path: path.value });
+    }
+
+IdentifierExpr
+  = name:Identifier {
+      return withLoc({ type: "Identifier", name });
+    }
+
+/* ================= LVALUE ================= */
+
+LValue
+  = base:IdentifierExpr suffixes:LValueSuffix* {
+      let node = base;
+      for (const s of suffixes) {
+        if (s.type === "MemberSuffix") {
+          node = withLoc({ type: "Member", object: node, property: s.property });
+        } else if (s.type === "IndexSuffix") {
+          node = withLoc({ type: "Index", object: node, index: s.index });
+        }
+      }
+      return node;
+    }
+
+LValueSuffix
+  = _ "." _ property:Identifier {
+      return { type: "MemberSuffix", property };
+    }
+  / _ "[" _ index:Expression _ "]" {
+      return { type: "IndexSuffix", index };
+    }
+
+Arguments
+  = head:Expression tail:(_ "," _ Expression)* {
+      return [head, ...tail.map(t => t[3])];
+    }
+
+/* ================= LITERALS ================= */
+
+Literal
+  = Nil
+  / Boolean
+  / Double
+  / Integer
+  / String
+  / ArrayLiteral
+
+Nil
+  = "nil" !IdentCont {
+      return withLoc({ type: "Nil" });
+    }
+
+Boolean
+  = "true" !IdentCont {
+      return withLoc({ type: "Boolean", value: true });
+    }
+  / "false" !IdentCont {
+      return withLoc({ type: "Boolean", value: false });
+    }
+
+ArrayLiteral
+  = "[" _ elements:Arguments? _ "]" {
+      return withLoc({ type: "ArrayLiteral", elements: elements || [] });
+    }
+
+Double
+  = $(
+      [0-9]+ "." [0-9]+
+    / "." [0-9]+
+    / [0-9]+ "."
+    ) {
+      return withLoc({ type: "Double", value: Number(text()) });
+    }
+
+Integer
+  = value:$([0-9]+) {
+      return withLoc({ type: "Int", value: Number(value) });
+    }
+
+String
+  = "\"" chars:Char* "\"" {
+      return withLoc({ type: "String", value: chars.join("") });
+    }
+
+Char
+  = "\\\"" { return "\""; }
+  / "\\n"  { return "\n"; }
+  / "\\t"  { return "\t"; }
+  / "\\\\" { return "\\"; }
+  / !("\"") c:. { return c; }
+
+/* ================= LEXICAL ================= */
+
+Identifier
+  = !Keyword name:$([a-zA-Z_][a-zA-Z0-9_]*) {
+      return name;
+    }
+
+Keyword
+  = "func" !IdentCont
+  / "var" !IdentCont
+  / "if" !IdentCont
+  / "else" !IdentCont
+  / "while" !IdentCont
+  / "for" !IdentCont
+  / "break" !IdentCont
+  / "continue" !IdentCont
+  / "return" !IdentCont
+  / "true" !IdentCont
+  / "false" !IdentCont
+  / "nil" !IdentCont
+
+IdentCont
+  = [a-zA-Z0-9_]
+
+Comment
+  = "//" (!"\n" .)* ("\n" / !.)
+
+_
+  = (Whitespace / Comment)*
+
+__
+  = (Whitespace / Comment)+
+
+Whitespace
+  = [ \t\n\r]

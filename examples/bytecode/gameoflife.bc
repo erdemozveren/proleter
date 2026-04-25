@@ -37,8 +37,8 @@ cclear:
 
 main:
   enter 13
-  pushs "./build/libmystd.so"
-  loaddll
+  pushs "./modules/std"
+  load_lib
   storeg 3
   enter 15
   # locals:
@@ -247,7 +247,7 @@ print_x:
   loadg 3
   pushs "print"
   object_get
-  pushs "1"
+  pushs "#"
   call 1
   pop
   loadg 3
@@ -261,7 +261,7 @@ print_dead:
   loadg 3
   pushs "print"
   object_get
-  pushs "0"
+  pushs " "
   call 1
   pop
 
@@ -282,12 +282,12 @@ print_row_end:
 print_done:
   # getchr (step-by-step)
   #loadg 3
-  #pushs "msleep"
+  #pushs "sleep"
   #object_get
   #call 0
   #pop
   loadg 3
-  pushs "msleep"
+  pushs "sleep"
   object_get
   pushi 30
   call 1

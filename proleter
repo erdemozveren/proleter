@@ -1,0 +1,176 @@
+#!/usr/bin/env node
+
+const path = require('path');
+const fs = require('fs');
+const compiler = require('./compiler');
+const {
+  spawn,
+  execSync
+} = require('child_process');
+
+function parseArgs(argv = process.argv.slice(2)) {
+  const args = {};
+  let currentKey = null;
+
+  for (const arg of argv) {
+    if (arg.startsWith('--')) {
+      currentKey = arg.slice(2);
+      args[currentKey] = true; // default boolean
+    } else if (arg.startsWith('-')) {
+      currentKey = arg.slice(1);
+      args[currentKey] = true;
+    } else if (currentKey) {
+      args[currentKey] = arg;
+      currentKey = null;
+    } else {
+      (args._ = args._ || []).push(arg); // positional args
+    }
+  }
+
+  return args;
+}
+
+const tmpPath = './.buildtmp';
+
+function usage() {
+  const commands = [
+    ['emit <input> <output>', 'Emit compiled output'],
+    ['exe  <input> <output>', 'Build executable'],
+    ['run  <input>', 'Run input file']
+  ];
+
+  const options = [
+    ['--target <platform>', 'Target platform (linux | win32)'],
+    ['--emit <type>', 'Output type (bc | c)']
+  ];
+
+  const format = (rows) =>
+    rows.map(([cmd, desc]) => `  ${cmd.padEnd(24)} ${desc}`).join('\n');
+
+  console.error(`Commands:
+${format(commands)}
+
+Options:
+${format(options)}
+
+Examples:
+  run  main.pl
+  emit main.pl out.bc --emit bc
+  exe  main.pl app --target linux
+`);
+  process.exit(1);
+}
+
+function cleanup() {
+  if (process.stdin.isTTY) {
+    try {
+      process.stdin.setRawMode(false);
+    } catch { }
+  }
+  if (fs.existsSync(tmpPath)) {
+    try {
+      fs.rmSync(tmpPath, {
+        force: true,
+        recursive: true
+      });
+    } catch { }
+  }
+}
+
+process.on('SIGINT', () => {
+  cleanup();
+  process.exit(130);
+});
+
+process.on('SIGTERM', () => {
+  cleanup();
+  process.exit(143);
+});
+
+process.on('exit', cleanup);
+
+
+const argv = parseArgs();
+
+// -------------------------
+// entry
+// -------------------------
+function main() {
+  cleanup();
+  if (!argv._ || argv._.length == 0) {
+    usage();
+    process.exit();
+  }
+  const [cmd, inputFile, outputFile] = argv._;
+  const projectRoot = process.cwd();
+  const vmPath = path.resolve('./build/proleter-vm');
+  const targetPlatform = compiler.TargetPlatform[argv.target || process.platform];
+  const isEmitC = cmd === 'exe' || argv.emit === 'c';
+  if (cmd === 'run') {
+    if (Object.keys(argv._).length == 1) {
+      usage();
+    }
+  } else if (cmd === 'emit' || cmd === 'exe') {
+    if (Object.keys(argv._).length != 3) {
+      usage();
+    }
+  }
+  if (!fs.existsSync(tmpPath)) {
+    fs.mkdirSync(tmpPath);
+  }
+  if (!targetPlatform) {
+    console.error(`Unsupported target platform : ${targetPlatform}`);
+    process.exit(1);
+  }
+  if (outputFile) {
+    console.log(`Building: ${inputFile} → ${outputFile}\n`);
+  }
+  const cc = argv.cc || 'gcc';
+  try {
+    if (cmd !== 'run') {
+      process.stdout.write('Compiling...');
+    }
+    const compiledOutput = compiler.compile(path.resolve(inputFile), projectRoot, isEmitC ? compiler.EmitType.c : compiler.TargetPlatform.bc, targetPlatform);
+    const tmpFilePath = path.join(tmpPath, path.basename(inputFile));
+    if (cmd !== 'run') {
+      process.stdout.write(' ✓\n');
+    }
+    switch (cmd) {
+      case 'emit':
+        fs.writeFileSync(outputFile, compiledOutput, 'utf-8');
+        console.log(`Compiled file: ${outputFile}`);
+        break;
+      case 'run':
+        fs.writeFileSync(tmpFilePath, compiledOutput, 'utf-8');
+        const program = spawn(vmPath, [tmpFilePath], {
+          stdio: 'inherit',
+        });
+        program.on('exit', cleanup);
+        program.on('close', cleanup);
+        program.on('error', cleanup);
+        break;
+      case 'exe':
+        const cSource = path.join(tmpPath, 'program.c');
+        const vmSource = "./vm/vm.c";
+        fs.writeFileSync(cSource, compiledOutput, 'utf-8');
+        process.stdout.write('Native compilation (via C backend)...')
+        execSync(`${cc} ${vmSource} ${cSource} -I./vm/include -rdynamic -O2 -o ${outputFile}`, {
+          stdio: 'inherit'
+        })
+        process.stdout.write(' ✓\n');
+        break;
+      default:
+        console.error('Unknown command');
+        usage();
+        break;
+    }
+    if (cmd === 'exe') {
+      console.log(`\n⚠ External modules are not embedded
+  → include required modules (e.g. std)`);
+    }
+  } catch (err) {
+    console.error(err.message);
+  }
+}
+
+main();

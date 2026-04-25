@@ -1,69 +1,71 @@
-# Tiny C VM
+# Proleter
 
-This is a **small stack-based virtual machine written in C**, along with a simple compiler for a hobby language.
+A tiny **stack-based hobby language** with a virtual machine written in C and a simple compiler written in JavaScript.
 
-This project exists mainly as a **learning exercise**. The goal is to understand how virtual machines, bytecode, and interpreters work at a low level, while also getting more comfortable writing real C code.
+This project is mainly a learning exercise. The goal is to understand how bytecode, interpreters, stack machines, memory management, native modules, and compiler structure work by building them from scratch.
 
-It is not intended to be fast, complete, or production-ready.
+It is **not** meant to be fast, stable, complete, or production-ready.
 
-## Why this project exists
+## Why
 
-- To learn **C** by building something concrete
-- To understand:
-  - bytecode formats
-  - stack-based execution
-  - instruction dispatch
-  - control flow and jumps
-- To experiment without overengineering
+Proleter exists to learn by building:
 
-Some helper parts (like string handling and escape sequences such as `\n`) and example programs were assisted using ChatGPT, mainly to avoid spending too much time on non-core details.
+- C programming
+- stack-based VM design
+- bytecode execution
+- instruction dispatch
+- function calls and stack frames
+- arrays, objects, and heap values
+- simple compiler/code generation ideas
+- native/runtime module experiments
+
+Some helper code, examples, wording, and small implementation details were assisted with AI to avoid spending too much time on non-core parts.
 
 ## What it can do
 
-- Stack-based virtual machine
-- Basic value types:
-  - arrays
+- Execute custom bytecode in a C VM
+- Use an operand stack and call frames
+- Work with values such as:
   - integers
   - doubles
   - strings
+  - arrays
+  - objects
+  - callables
   - `nil`
-- Arithmetic and comparison operations
-- Local variables
-- Control flow (conditionals, jumps)
-- Single-pass compilation with backpatching
-- Example programs included in the `examples/` directory
-- Can run **Rule 110**, meaning the VM is effectively **Turing complete** (examples/rule110.bc have step limiter to see output clearly)
+- Run arithmetic, comparison, logical, and jump instructions
+- Use local variables and globals
+- Call user functions and native functions
+- Allocate heap objects
+- Import small runtime/native modules
+- Compile a small language to bytecode
+- **Emit C code and build native executables** (C backend)
+- Run example programs, including Rule 110
 
-## Project layout (high level)
+## Project layout
 
-- **VM**  
-  Executes bytecode using an operand stack and instruction pointer
-
-- **Compiler**  (TODO)
-  A small compiler for a hobby language that emits bytecode directly
-
-- **Examples**  
-  Small programs used for testing and experimentation
+```text
+proleter-lang/
+├─ compiler/   JavaScript compiler
+├─ vm/         C virtual machine and runtime code
+├─ modules/    native/runtime modules
+└─ examples/   small example programs
+````
 
 ## What it is not
 
-- Not a full language implementation
-- Not optimized
-- Not stable
-- Not intended for embedding or real-world use
+* Not a serious programming language
+* Not optimized
+* Not stable
+* Not memory-safe yet
+* Not a production VM
+* Not intended for real-world embedding
 
-Expect things to change or break.
+Things may change or break often.
 
-## Goals
+## Goal
 
-- Keep the code readable and small
-- Learn more about:
-  - C memory management
-  - VM design
-  - compiler structure
-- Improve correctness step by step
-
-This project is primarily about learning and experimentation.
+Keep the project small, readable, and useful for learning.
 
 ## License
 

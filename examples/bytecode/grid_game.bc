@@ -4,8 +4,8 @@ halt
 
 main:
   enter 4        # slot0 = x, slot1 = y, slot2 = key, slot3 = GRID_SIZE
-  pushs "./build/libmystd.so"
-  loaddll
+  pushs "./modules/std"
+  load_lib
   storeg 0
   # x 
   pushi 5

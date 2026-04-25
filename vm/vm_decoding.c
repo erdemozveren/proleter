@@ -1,11 +1,6 @@
-#ifndef VM_ASM_H
-#define VM_ASM_H
-
-// asm.c - minimal assembler (C99)
-// Rules:
-//   - labels define instruction IPs
-//   - JMP/JZ/CALL uses absolute IP
+#include "vm.h"
 #include <ctype.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -14,12 +9,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "vm_structs.h"
-#include "vm_utils.h"
-/* ================= helpers ================= */
-
-static void vm_compile_errorf(const char *path, size_t line, const char *fmt,
-                              ...) {
+void vm_compile_errorf(const char *path, size_t line, const char *fmt, ...) {
   fprintf(stderr, "\n=== VM COMPILE ERROR ===\n");
   fprintf(stderr, "%s:%ld: ", path, line);
   va_list args;
@@ -30,19 +20,19 @@ static void vm_compile_errorf(const char *path, size_t line, const char *fmt,
   exit(1);
 }
 
-static void rtrim(char *s) {
+void vm_rtrim(char *s) {
   int n = (int)strlen(s);
   while (n > 0 && isspace((unsigned char)s[n - 1]))
     s[--n] = 0;
 }
 
-static char *ltrim(char *s) {
+char *vm_ltrim(char *s) {
   while (*s && isspace((unsigned char)*s))
     s++;
   return s;
 }
 
-static int is_empty_or_comment(const char *s) {
+int vm_is_empty_or_comment(const char *s) {
   while (*s && isspace((unsigned char)*s))
     s++;
   return (*s == 0 || *s == '#' || (*s == '/' && s[1] == '/'));
@@ -50,19 +40,12 @@ static int is_empty_or_comment(const char *s) {
 
 /* ================= labels  ================= */
 
-#define MAX_LABELS 512
+Label labels[VM_LABELS_MAX];
+size_t label_count = 0;
 
-typedef struct {
-  char *name;
-  size_t ip;
-} Label;
-
-static Label labels[MAX_LABELS];
-static size_t label_count = 0;
-
-static bool is_eol_or_eof(char c) { return c == '\0' || c == '\n'; }
-static bool parse_string_literal(const char *p, char **out, const char *path,
-                                 size_t line) {
+bool vm_is_eol_or_eof(char c) { return c == '\0' || c == '\n'; }
+bool vm_parse_string_literal(const char *p, char **out, const char *path,
+                             size_t line) {
   if (*p != '"')
     return false;
 
@@ -84,7 +67,7 @@ static bool parse_string_literal(const char *p, char **out, const char *path,
     }
 
     if (*p == '"') {
-      if (!is_eol_or_eof(*(++p))) {
+      if (!vm_is_eol_or_eof(*(++p))) {
         vm_compile_errorf(
             path, line,
             "syntax error in string declaration, expecting end-of-input");
@@ -109,120 +92,25 @@ static bool parse_string_literal(const char *p, char **out, const char *path,
   vm_compile_errorf(path, line, "unterminated string literal");
   return false;
 }
-// static bool parse_int_literal(const char *p, const char **end, int64_t *out)
-// {
-//   bool neg = false;
-//   int64_t value = 0;
-//
-//   if (*p == '-') {
-//     neg = true;
-//     p++;
-//   }
-//
-//   if (!isdigit((unsigned char)*p))
-//     return false;
-//
-//   while (!is_eol_or_eof(*p)) {
-//     if (!isdigit((unsigned char)*p))
-//       return false;
-//
-//     int digit = *p - '0';
-//     if (value > (INT64_MAX - digit) / 10)
-//       return false;
-//
-//     value = value * 10 + digit;
-//     p++;
-//   }
-//
-//   if (out)
-//     *out = neg ? -value : value;
-//   if (end)
-//     *end = p;
-//
-//   return true;
-// }
 
-// static bool parse_double_literal(const char *p, const char **end, double
-// *out) {
-//   bool neg = false;
-//   double value = 0.0;
-//   double frac = 0.0;
-//   double scale = 1.0;
-//   bool seen_dot = false;
-//
-//   if (*p == '-') {
-//     neg = true;
-//     p++;
-//   }
-//
-//   if (!isdigit((unsigned char)*p))
-//     return false;
-//
-//   while (!is_eol_or_eof(*p)) {
-//     if (*p == '.') {
-//       if (seen_dot)
-//         return false; // second dot
-//       seen_dot = true;
-//       p++;
-//       if (!isdigit((unsigned char)*p))
-//         return false;
-//       continue;
-//     }
-//
-//     if (!isdigit((unsigned char)*p))
-//       return false;
-//
-//     if (!seen_dot) {
-//       value = value * 10.0 + (*p - '0');
-//     } else {
-//       frac = frac * 10.0 + (*p - '0');
-//       scale *= 10.0;
-//     }
-//     p++;
-//   }
-//
-//   if (!seen_dot)
-//     return false; // must be double
-//
-//   value += frac / scale;
-//
-//   if (out)
-//     *out = neg ? -value : value;
-//   if (end)
-//     *end = p;
-//
-//   return true;
-// }
-
-// a.k.a strdup
-static char *alloc_str(const char *src) {
-  size_t len = strlen(src) + 1;    // String plus '\0'
-  char *dst = (char *)malloc(len); // Allocate space
-  if (dst == NULL)
-    return NULL;         // No memory
-  memcpy(dst, src, len); // Copy the block
-  return dst;            // Return the new string
-}
-
-static void add_label(const char *path, size_t line, const char *name,
-                      size_t ip) {
+void vm_add_label(const char *path, size_t line, const char *name, size_t ip) {
   for (size_t i = 0; i < label_count; i++)
     if (strcmp(labels[i].name, name) == 0)
       vm_compile_errorf(path, line, "duplicate label \"%s\"", name);
 
-  labels[label_count].name = alloc_str(name);
+  labels[label_count].name = vm_strdup(name);
   labels[label_count].ip = ip;
   label_count++;
 }
 
-static bool is_label_exist(const char *name) {
+bool vm_vm_is_label_exist(const char *name) {
   for (size_t i = 0; i < label_count; i++)
     if (strcmp(labels[i].name, name) == 0)
       return true;
   return false;
 }
 
-static size_t label_ip(const char *path, size_t line, const char *name) {
+size_t vm_label_ip(const char *path, size_t line, const char *name) {
   for (size_t i = 0; i < label_count; i++)
     if (strcmp(labels[i].name, name) == 0)
       return labels[i].ip;
@@ -231,12 +119,6 @@ static size_t label_ip(const char *path, size_t line, const char *name) {
 }
 
 /* ================= opcode lookup ================= */
-
-typedef struct {
-  const char *name;
-  OpCode op;
-} OpMap;
-
 static OpMap ops[] = {
     {"nop", OP_NOP},
     {"pushi", OP_PUSH_INT},
@@ -291,11 +173,11 @@ static OpMap ops[] = {
     {"len", OP_LEN},
     {"ret", OP_RET},
     {"ret_void", OP_RET_VOID},
-    {"loaddll", OP_LOADDLL},
+    {"load_lib", OP_LOAD_LIB},
     {"halt", OP_HALT},
 };
 
-static int find_op(const char *s, OpCode *out) {
+int vm_find_op(const char *s, OpCode *out) {
   int n = sizeof(ops) / sizeof(ops[0]);
   for (int i = 0; i < n; i++)
     if (strcmp(ops[i].name, s) == 0) {
@@ -307,7 +189,7 @@ static int find_op(const char *s, OpCode *out) {
 
 /* ================= label/named builtins syntax ================= */
 
-static bool is_label(const char *s, StrBuf *out) {
+bool vm_is_label(const char *s, StrBuf *out) {
   const char *p = s;
   if (!isalpha((unsigned char)*p) && *p != '_')
     return false;
@@ -319,14 +201,14 @@ static bool is_label(const char *s, StrBuf *out) {
     return false;
 
   size_t len = (size_t)(p - s);
-  sb_reserve(out, len + 1);
+  vm_sb_reserve(out, len + 1);
   memcpy(out->buf, s, len);
   out->buf[len] = '\0';
   return true;
 }
 
 /* ================= assembler ================= */
-static char *read_file(const char *path) {
+char *vm_read_file(const char *path) {
   FILE *f = fopen(path, "rb");
   if (!f)
     return NULL;
@@ -349,14 +231,14 @@ static char *read_file(const char *path) {
   fclose(f);
   return buf;
 }
-static char *find_eol(char *p) {
+char *vm_find_eol(char *p) {
   while (*p && *p != '\n')
     p++;
   return p;
 }
 
-static Inst *load_program(VM *vm, const char *path) {
-  char *source = read_file(path);
+Inst *vm_load_program(VM *vm, const char *path) {
+  char *source = vm_read_file(path);
   if (!source)
     return NULL;
 
@@ -372,25 +254,25 @@ static Inst *load_program(VM *vm, const char *path) {
   // size_t linebufcap = 512;
   StrBuf linestr = {0};
   StrBuf tmplabelname = {0};
-  sb_init(&linestr);
-  sb_init(&tmplabelname);
-  sb_reserve(&linestr, 256);
-  sb_reserve(&tmplabelname, 256);
+  vm_sb_init(&linestr);
+  vm_sb_init(&tmplabelname);
+  vm_sb_reserve(&linestr, 256);
+  vm_sb_reserve(&tmplabelname, 256);
   for (char *p = source; *p;) {
-    char *eol = find_eol(p);
+    char *eol = vm_find_eol(p);
     size_t len = (size_t)(eol - p);
-    sb_reserve(&linestr, len);
+    vm_sb_reserve(&linestr, len);
     memcpy(linestr.buf, p, len);
     linestr.buf[len] = '\0';
     linestr.len = 0;
-    char *s = ltrim(linestr.buf);
-    rtrim(s);
+    char *s = vm_ltrim(linestr.buf);
+    vm_rtrim(s);
 
-    if (!is_empty_or_comment(s)) {
+    if (!vm_is_empty_or_comment(s)) {
       tmplabelname.buf[0] = '\0';
       tmplabelname.len = 0;
-      if (is_label(s, &tmplabelname)) {
-        add_label(path, line, tmplabelname.buf, ip);
+      if (vm_is_label(s, &tmplabelname)) {
+        vm_add_label(path, line, tmplabelname.buf, ip);
       } else {
         ip++;
       }
@@ -421,10 +303,10 @@ static Inst *load_program(VM *vm, const char *path) {
   int pc = 0;
   line = 1;
 
-  if (!is_label_exist("main")) {
+  if (!vm_vm_is_label_exist("main")) {
     printf("Program must have one main label to run\n"
            "main:\n"
-           " pushi 0"
+           " pushi 0\n"
            " ret\n");
     exit(1);
   }
@@ -439,16 +321,16 @@ static Inst *load_program(VM *vm, const char *path) {
       p += strlen(p);
     }
 
-    char *s = ltrim(line_start);
-    rtrim(s);
+    char *s = vm_ltrim(line_start);
+    vm_rtrim(s);
 
-    if (is_empty_or_comment(s)) {
+    if (vm_is_empty_or_comment(s)) {
       line++;
       continue;
     }
 
     tmplabelname.buf[0] = '\0';
-    if (is_label(s, &tmplabelname) || *s == '@') {
+    if (vm_is_label(s, &tmplabelname) || *s == '@') {
       line++;
       continue;
     }
@@ -460,13 +342,13 @@ static Inst *load_program(VM *vm, const char *path) {
     }
 
     OpCode op;
-    if (!find_op(op_s, &op))
+    if (!vm_find_op(op_s, &op))
       vm_compile_errorf(path, line, "unknown opcode \"%s\"", op_s);
 
     Inst in;
     memset(&in, 0, sizeof(in));
     in.type = op;
-    in.soure_line_num = line;
+    in.source_line_num = line;
     /* ---------------- operands ---------------- */
     if (op == OP_PUSH_INT) {
       char *a = strtok(NULL, " \t");
@@ -478,7 +360,7 @@ static Inst *load_program(VM *vm, const char *path) {
       if (!t)
         vm_compile_errorf(path, line, "%s needs label", op_s);
 
-      in.u = label_ip(path, line, t);
+      in.u = vm_label_ip(path, line, t);
     } else if (op == OP_PUSH_DOUBLE) {
       char *a = strtok(NULL, " \t");
       if (!a)
@@ -495,7 +377,7 @@ static Inst *load_program(VM *vm, const char *path) {
                           "%s operand must be equal or greater than 0", op_s);
       }
       if ((op == OP_STORE_GLOBAL || op == OP_LOAD_GLOBAL) &&
-          number >= GLOBALS_MAX) {
+          number >= VM_GLOBALS_MAX) {
         vm_compile_errorf(path, line, "%s operand must be less then %d", op_s,
                           number);
       }
@@ -518,16 +400,16 @@ static Inst *load_program(VM *vm, const char *path) {
       if (!t)
         vm_compile_errorf(path, line, "jump needs label for %s", op_s);
 
-      size_t target = label_ip(path, line, t);
+      size_t target = vm_label_ip(path, line, t);
       in.u = target;
     } else if (op == OP_PUSH_STR) {
       char *strbuf = NULL;
-      while (!is_eol_or_eof(*s) && *s != '"') {
+      while (!vm_is_eol_or_eof(*s) && *s != '"') {
         s++;
       }
       s++; // quote
-      parse_string_literal(s, &strbuf, path, line);
-      in.str = vm_alloc_string(vm, strbuf);
+      vm_parse_string_literal(s, &strbuf, path, line);
+      in.str = vm_malloc_string(vm, strbuf);
       if (strbuf != NULL) {
         free(strbuf);
       }
@@ -553,5 +435,3 @@ static Inst *load_program(VM *vm, const char *path) {
   tmplabelname.len = 0;
   return code;
 }
-
-#endif

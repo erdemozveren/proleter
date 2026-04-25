@@ -1,0 +1,110 @@
+#ifndef VM_API_H
+#define VM_API_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#define PROLETER_LIB_INIT_FN init_lib
+#define PROLETER_LIB_INIT_NAME "init_lib"
+#define PROLETER_API_VERSION 1
+
+typedef struct VM VM;
+typedef struct String String;
+typedef struct Array Array;
+typedef struct Object Object;
+typedef struct Callable Callable;
+typedef struct Value Value;
+
+typedef enum {
+  VAL_NIL = 0,
+  VAL_INT,
+  VAL_DOUBLE,
+  VAL_CALLABLE,
+  VAL_STR,
+  VAL_ARRAY,
+  VAL_OBJECT,
+  VAL_TYPE_END
+} ValueType;
+
+typedef enum {
+  CALLABLE_NATIVE,
+  CALLABLE_USER,
+} CallableType;
+
+typedef int (*vm_api_version_fn)(void);
+typedef Value (*init_lib_fn)(VM *vm);
+typedef Value (*NativeFn)(VM *vm, size_t argc, Value *argv);
+
+struct Callable {
+  const char *name;
+  CallableType type;
+  union {
+    NativeFn native;
+    size_t entry_ip;
+  } as;
+};
+
+typedef struct Value {
+  ValueType type;
+  union {
+    String *str;
+    Array *arr;
+    Object *obj;
+    Callable *fn;
+    int64_t i;
+    size_t u;
+    double d;
+  } as;
+} Value;
+
+#define VM_NIL ((Value){.type = VAL_NIL})
+
+/* =========================
+ * Value helpers / constructors
+ * ========================= */
+
+char *vm_value_type_name(ValueType t);
+
+int vm_val_is_numeric(Value v);
+double vm_val_to_double(Value v);
+int vm_val_is_eq(Value a, Value b);
+
+const char *vm_string_chars(String *s);
+size_t vm_string_len(String *s);
+
+Value vm_new_int(int64_t val);
+Value vm_new_double(double val);
+Value vm_new_string(VM *vm, char *str);
+Value vm_make_native(VM *vm, const char *name, NativeFn fn);
+
+/* =========================
+ * Object values
+ * ========================= */
+
+Value vm_object_new(VM *vm, size_t initial_cap);
+void vm_object_set(VM *vm, Object *o, const char *key, Value v);
+bool vm_object_get(Object *o, const char *key, Value *out);
+void vm_object_del(Object *o, const char *key);
+
+/* =========================
+ * Array values
+ * ========================= */
+
+Value vm_array_new(VM *vm, size_t initial_cap);
+void vm_array_set(VM *vm, Array *a, size_t index, Value v);
+void vm_array_push(VM *vm, Array *a, Value v);
+void vm_array_del(Array *a, size_t index);
+size_t vm_array_len(Array *a);
+
+/* =========================
+ * Public helper
+ * ========================= */
+
+void vm_errorf(const char *fmt, ...);
+void vm_halt(VM *vm);
+
+size_t vm_memory_capacity(VM *vm);
+size_t vm_used_memory(VM *vm);
+
+#endif

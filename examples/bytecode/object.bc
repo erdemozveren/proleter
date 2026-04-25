@@ -13,8 +13,8 @@ println:
 
 main:
   enter 1
-  pushs "./build/libmystd.so"
-  loaddll
+  pushs "./modules/std"
+  load_lib
   storeg 0
   pushfn println
   object_new

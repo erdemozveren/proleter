@@ -11,8 +11,8 @@ println:
   ret_void
 
 main:
-  pushs "./build/libmystd.so"
-  loaddll
+  pushs "./modules/std"
+  load_lib
   storeg 0
   pushi 0
   array_new

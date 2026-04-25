@@ -4,8 +4,8 @@ halt
 
 
 main:
-  pushs "./build/libmystd.so"
-  loaddll
+  pushs "./modules/std"
+  load_lib
   storeg 0
   loadg 0
   pushs "println"

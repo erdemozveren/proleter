@@ -4,8 +4,8 @@ halt
 
 
 main:
-  pushs "./build/libmystd.so"
-  loaddll
+  pushs "./modules/std"
+  load_lib
   storeg 0
   enter 2 # reserve 2 slot
   pushfn fib
@@ -15,7 +15,7 @@ main:
   call 1
   store 1 # result in slot 1 (should be 6765 for fib 20)
   loadg 0
-  pushs "println"
+  pushs "print"
   object_get
   pushs "fib("
   load 0

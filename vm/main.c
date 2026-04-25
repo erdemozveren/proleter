@@ -1,7 +1,8 @@
 #include "vm.h"
-#include "vm_decoding.h"
-#include "vm_utils.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 int main(int argc, char **argv) {
   const char *progname = argv[0];
@@ -20,15 +21,12 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  srand((unsigned)time(NULL));
   VM vm = {0};
   vm.heap =
       (Heap){.current = NULL, .used = 0, .capacity = (1024 * 1024 * 1024)};
-  load_program(&vm, source_path);
-  vm_run(&vm);
-  vm_print_stack_top(&vm);
+  vm_load_program(&vm, source_path);
+  vm_run_program(&vm);
   vm_heap_free(&vm);
-  free_program(vm.program);
-  printf("REACHED END\n");
+  vm_free_program(vm.program);
   return 0;
 }
