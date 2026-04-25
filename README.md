@@ -42,6 +42,29 @@ Some helper code, examples, wording, and small implementation details were assis
 - **Emit C code and build native executables** (C backend)
 - Run example programs, including Rule 110
 
+## CLI
+
+Proleter includes a simple command line interface for running and building programs.
+
+### Usage
+
+```sh
+proleter-lang ❯ ./proleter
+Commands:
+  emit <input> <output>    Emit compiled output
+  exe  <input> <output>    Build executable
+  run  <input>             Run input file
+
+Options:
+  --target <platform>      Target platform (linux | win32)
+  --emit <type>            Output type (bc | c)
+
+Examples:
+  run  main.pl
+  emit main.pl out.bc --emit bc
+  exe  main.pl app --target linux
+```
+
 ## Project layout
 
 ```text
