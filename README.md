@@ -74,6 +74,7 @@ proleter-lang/
 ├─ vm/         C virtual machine and runtime code
 ├─ modules/    native/runtime modules
 └─ examples/   small example programs
+└─ editor/     editor syntax files
 ````
 
 ## What it is not
