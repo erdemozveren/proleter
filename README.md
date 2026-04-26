@@ -73,7 +73,7 @@ proleter-lang/
 ├─ compiler/   JavaScript compiler
 ├─ vm/         C virtual machine and runtime code
 ├─ modules/    native/runtime modules
-└─ examples/   small example programs
+├─ examples/   small example programs
 └─ editor/     editor syntax files
 ````
 
