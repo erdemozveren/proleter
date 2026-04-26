@@ -1317,7 +1317,7 @@ Value vm_array_new(VM *vm, size_t initial_cap) {
   Array *a = vm_gc_alloc(vm, sizeof(Array), OBJ_ARRAY);
   size_t cap = initial_cap < 1 ? 1 : initial_cap;
   size_t cap_bytes = cap * sizeof(Value);
-  a->len = cap;
+  a->len = 0;
   a->cap = cap;
   a->items = calloc(cap, sizeof(Value));
   vm->heap.bytes_allocated += cap_bytes;
@@ -1326,7 +1326,7 @@ Value vm_array_new(VM *vm, size_t initial_cap) {
 
 void vm_array_grow_capacity(VM *vm, Array *a, size_t needed_size) {
   size_t new_cap = needed_size < 1 ? 8 : a->cap;
-  if (new_cap >= a->cap)
+  if (new_cap < a->cap)
     return;
 
   size_t old_bytes = a->cap * sizeof(Value);
@@ -1335,6 +1335,9 @@ void vm_array_grow_capacity(VM *vm, Array *a, size_t needed_size) {
   }
   size_t new_bytes = new_cap * sizeof(Value);
   Value *items = realloc(a->items, new_bytes);
+  if (!items) {
+    vm_panic("Cannot alloc memory: array grow failed");
+  }
 
   memset(items + a->cap, 0, (new_cap - a->cap) * sizeof(Value));
 
@@ -1347,7 +1350,6 @@ void vm_array_set(VM *vm, Array *a, size_t index, Value v) {
   if (index >= a->cap) {
     size_t new_cap = a->cap ? a->cap * 2 : 4;
     vm_array_grow_capacity(vm, a, new_cap);
-    // old buffer becomes garbage (GC later)
   }
   if (index >= a->len) {
     // if its adds a new elements
@@ -1360,7 +1362,6 @@ void vm_array_push(VM *vm, Array *a, Value v) {
   if (a->len >= a->cap) {
     size_t new_cap = a->cap ? a->cap * 2 : 4;
     vm_array_grow_capacity(vm, a, new_cap);
-    // old buffer becomes garbage (GC later)
   }
   a->items[a->len++] = v;
 }
