@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
                    .next_gc = VM_GC_START_THRESHOLD};
   vm_load_program(&vm, source_path);
   vm_run_program(&vm);
-#if PROLETER_DEBUG
+#if 0
   vm_print_stack_top(&vm);
 #endif
   vm_gc_sweep_all(&vm);
