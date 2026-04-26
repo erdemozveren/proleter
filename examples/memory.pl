@@ -1,15 +1,16 @@
 var std:object = @import("std");
-var process:object = @import("process");
+var gc:object = @import("gc");
+
 func show_usage() {
-    var m: object = process.memory_usage();
-    std.printf("mem %f / %f (mb)\nrss: %f (mb)\n",m.used/1024/1024,m.total/1024/1024,m.rss/1024/1024);
+    var used: object = gc.allocated();
+    var rss: object = gc.rss();
+    std.printf("mem %f (mb)\nrss: %f (mb)\n",used/1024.0/1024.0,rss/1024.0/1024.0);
 }
 
 func main() {
     std.println("---Before Allocation---");
     show_usage();
-    var len:int = 30000000;
-    var a: int[30000000];
+    var a: int[6000000];
     std.println("---After---");
     show_usage();
     return 0;

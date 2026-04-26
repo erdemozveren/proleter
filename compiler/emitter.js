@@ -84,16 +84,19 @@ function cProgramTemplate(code) {
 
 int main(int argc, char **argv) {
   VM vm = {0};
-  vm.heap = (Heap){.current = NULL, .used = 0, .capacity = (1024 * 1024 * 1024)};
+  vm.heap = (Heap){.objects = NULL,
+                   .object_count = 0,
+                   .bytes_allocated = 0,
+                   .next_gc = VM_GC_START_THRESHOLD};
   ${code}
   vm_run_program(&vm);
-  vm_heap_free(&vm);
+  vm_gc_sweep_all(&vm);
   return 0;
 }
 `;
 }
 
-const cInstValFields = ["operand", "u", "d", "str", "op_type", "source_line_num"];
+const cInstValFields = ["operand", "u", "d", "chars", "op_type", "source_line_num"];
 
 function makeCInstString(i) {
   if (!i.type) throw new Error("Instruction must have opcode type");
@@ -623,7 +626,7 @@ class Emitter {
 
       case "pushs":
         this.expectOperands(opcode, operands, 1);
-        inst = { type, str: `vm_malloc_string(&vm,${operands[0]})` };
+        inst = { type, chars: operands[0] };
         break;
 
       case "pushfn":

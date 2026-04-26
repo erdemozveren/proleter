@@ -22,11 +22,16 @@ int main(int argc, char **argv) {
   }
 
   VM vm = {0};
-  vm.heap =
-      (Heap){.current = NULL, .used = 0, .capacity = (1024 * 1024 * 1024)};
+  vm.heap = (Heap){.objects = NULL,
+                   .object_count = 0,
+                   .bytes_allocated = 0,
+                   .next_gc = VM_GC_START_THRESHOLD};
   vm_load_program(&vm, source_path);
   vm_run_program(&vm);
-  vm_heap_free(&vm);
+#if PROLETER_DEBUG
+  vm_print_stack_top(&vm);
+#endif
+  vm_gc_sweep_all(&vm);
   vm_free_program(vm.program);
   return 0;
 }

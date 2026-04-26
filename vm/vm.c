@@ -2,6 +2,7 @@
 #include "vm_api.h"
 #include <assert.h>
 #include <dlfcn.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <stdalign.h>
 #include <stdarg.h>
@@ -225,13 +226,12 @@ int vm_inst_execute(VM *vm, const Inst inst) {
     vm->ip += 1;
     break;
   case OP_PUSH_STR: {
-    vm_push(vm, (Value){.type = VAL_STR, .as.str = inst.str});
+    vm_push(vm, vm_new_string(vm, inst.chars));
     vm->ip += 1;
     break;
   }
   case OP_PUSH_FN: {
-    Callable *fn = (Callable *)vm_heap_alloc(&vm->heap, sizeof(Callable),
-                                             alignof(Callable));
+    Callable *fn = (Callable *)vm_gc_alloc(vm, sizeof(Callable), OBJ_CALLABLE);
     fn->type = CALLABLE_USER;
     fn->as.entry_ip = inst.u;
     vm_push(vm, (Value){.type = VAL_CALLABLE, .as.fn = fn});
@@ -817,7 +817,7 @@ void vm_print_inst(const Inst *in) {
 
   printf(", line=%ld", in->source_line_num);
   if (in->type == OP_PUSH_STR) {
-    printf(", chars=\"%s\"", in->str->chars);
+    printf(", chars=\"%s\"", in->chars);
   } else {
     printf(", operand=%lld", (long long)in->operand);
   }
@@ -833,6 +833,7 @@ void vm_run_program(VM *vm) {
     // printf("execute ip %d\n", vm->ip);
     // vm_print_inst(&vm->program->inst[vm->ip]);
     Inst *previnst = &vm->program->inst[vm->ip];
+    // vm_gc_pause(vm);
     int next_ip = vm_inst_execute(vm, vm->program->inst[vm->ip]);
     if (next_ip != 0) {
       if (previnst) {
@@ -841,6 +842,7 @@ void vm_run_program(VM *vm) {
       }
       break;
     }
+    vm_gc_collect_if_needed(vm);
   }
 }
 
@@ -848,88 +850,201 @@ size_t vm_align_up(size_t n, size_t align) {
   return (n + align - 1) & ~(align - 1);
 }
 
-HeapBlock *vm_heap_new_block(size_t min_size) {
-  size_t cap = min_size > VM_HEAP_BLOCK_SIZE ? min_size : VM_HEAP_BLOCK_SIZE;
-  HeapBlock *b = (HeapBlock *)malloc(sizeof(HeapBlock));
-  if (!b) {
-    printf("Heap can not allocate memory\n");
-    exit(1);
+void vm_gc_mark_value(Value v) {
+  switch (v.type) {
+  case VAL_STR:
+    vm_gc_mark_obj((HeapObj *)v.as.str);
+    break;
+
+  case VAL_ARRAY:
+    vm_gc_mark_obj((HeapObj *)v.as.arr);
+    break;
+
+  case VAL_OBJECT:
+    vm_gc_mark_obj((HeapObj *)v.as.obj);
+    break;
+
+  case VAL_CALLABLE:
+    vm_gc_mark_obj((HeapObj *)v.as.fn);
+    break;
+  case VAL_INT:
+  case VAL_NIL:
+  case VAL_DOUBLE:
+  case VAL_TYPE_END:
+  default:
+    break;
   }
-  b->data = (char *)malloc(cap);
-  b->capacity = cap;
-  b->used = 0;
-  b->next = NULL;
-  return b;
 }
 
-void *vm_heap_alloc(Heap *h, size_t size, size_t align) {
-  HeapBlock *b = h->current;
+void vm_gc_mark_obj(HeapObj *obj) {
+  if (!obj || obj->marked)
+    return;
 
-  /* ensure we have a block */
-  if (!b) {
-    b = vm_heap_new_block(size + align);
-    b->next = NULL;
-    h->current = b;
+  obj->marked = true;
+
+  switch ((ObjKind)obj->kind) {
+  case OBJ_STRING:
+  case OBJ_CALLABLE:
+    break;
+
+  case OBJ_ARRAY: {
+    Array *a = (Array *)obj;
+    for (size_t i = 0; i < a->len; i++) {
+      vm_gc_mark_value(a->items[i]);
+    }
+    break;
   }
 
-  /* align the OFFSET, not the size */
-  size_t off = vm_align_up(b->used, align);
-
-  /* check if current block fits */
-  if (off + size > b->capacity) {
-    /* global heap limit check */
-    if (h->used + size > h->capacity) {
-      printf("Heap memory limit reached (%.2f MiB)\n",
-             (double)h->capacity / (1024.0 * 1024.0));
-      exit(1);
+  case OBJ_OBJECT: {
+    Object *o = (Object *)obj;
+    for (size_t i = 0; i < o->len; i++) {
+      vm_gc_mark_value(o->entries[i].value);
     }
 
-    /* allocate a new block with alignment slack */
-    HeapBlock *nb = vm_heap_new_block(size + align);
-    nb->next = h->current;
-    h->current = nb;
-    b = nb;
+    if (o->proto) {
+      vm_gc_mark_obj((HeapObj *)o->proto);
+    }
+    break;
+  }
+  }
+}
+void vm_gc_mark_roots(VM *vm) {
+  for (size_t i = 0; i < vm->sp; i++) {
+    vm_gc_mark_value(vm->stack[i]);
+  }
+  for (size_t i = 0; i < VM_GLOBALS_MAX; i++) {
+    vm_gc_mark_value(vm->globals[i]);
+  }
+}
 
-    off = vm_align_up(b->used, align);
+void vm_gc_sweep(VM *vm) {
+  HeapObj **obj = &vm->heap.objects;
+
+  while (*obj) {
+    if (!(*obj)->marked) {
+      HeapObj *unreached = *obj;
+      *obj = unreached->next;
+      vm_gc_free_obj(vm, unreached);
+    } else {
+      (*obj)->marked = false; // reset for next cycle
+      obj = &(*obj)->next;
+    }
+  }
+}
+void vm_gc_sweep_all(VM *vm) {
+  HeapObj *obj = vm->heap.objects;
+
+  while (obj) {
+    HeapObj *next = obj->next;
+    vm_gc_free_obj(vm, obj);
+    obj = next;
   }
 
-  void *ptr = b->data + off;
-  b->used = off + size;
-  h->used += size;
+  vm->heap.objects = NULL;
+}
 
-#ifdef PROLETER_DEBUG
-  /* alignment sanity check */
-  if (((uintptr_t)ptr & (align - 1)) != 0) {
-    fprintf(stderr, "vm_heap_alloc returned misaligned pointer\n");
-    abort();
+void vm_gc_collect(VM *vm) {
+  // 1. mark
+  vm_gc_mark_roots(vm);
+  // 2. sweep
+  vm_gc_sweep(vm);
+  // 3. reset threshold
+  vm->heap.next_gc = vm->heap.bytes_allocated * VM_GC_GROW_FACTOR;
+}
+
+void *vm_gc_alloc(VM *vm, size_t size, ObjKind kind) {
+  if (!kind) {
+    vm_panic("Memory allocation needs object kind");
   }
-#endif
+  if (vm->heap.bytes_allocated + size > vm->heap.next_gc) {
+    vm->gc_requested = true;
+  }
+  HeapObj *obj = malloc(size);
+  if (!obj) {
+    vm_panic("Cannot allocate memory: %s", strerror(errno));
+  }
+  obj->kind = kind;
+  obj->marked = false;
+  obj->size = size;
 
-  return ptr;
+  obj->next = vm->heap.objects;
+  vm->heap.objects = obj;
+
+  vm->heap.object_count++;
+  vm->heap.bytes_allocated += size;
+  return obj;
+}
+
+void vm_gc_free_obj(VM *vm, HeapObj *obj) {
+  if (!obj)
+    return;
+  vm->heap.bytes_allocated -= obj->size;
+  vm->heap.object_count--;
+  switch (obj->kind) {
+  case OBJ_OBJECT: {
+    Object *o = (Object *)obj;
+    for (size_t i = 0; i < o->len; i++) {
+      free(o->entries[i].key);
+    }
+    if (o->entries) {
+      free(o->entries);
+    }
+    free(o);
+    break;
+  }
+  case OBJ_ARRAY: {
+    Array *a = (Array *)obj;
+    vm->heap.bytes_allocated -= a->cap * sizeof(Value);
+    if (a->items) {
+      free(a->items);
+    }
+    free(obj);
+    break;
+  }
+  case OBJ_STRING:
+  case OBJ_CALLABLE:
+    free(obj);
+    break;
+  default:
+    vm_panic("Unknown heap object kind");
+    break;
+  }
+}
+
+void vm_gc_collect_if_needed(VM *vm) {
+  if (!vm->gc_requested)
+    return;
+  if (vm->gc_pause_count > 0)
+    return;
+
+  vm->gc_requested = false;
+  vm_gc_collect(vm);
+}
+
+void vm_gc_pause(VM *vm) { vm->gc_pause_count++; }
+void vm_gc_resume(VM *vm) {
+  if (vm->gc_pause_count == 0)
+    return;
+
+  vm->gc_pause_count--;
+
+  if (vm->gc_pause_count == 0 && vm->gc_requested) {
+    vm->gc_requested = false;
+    vm_gc_collect(vm);
+  }
 }
 
 void vm_free_program(Program *p) {
-  // for (int i = 0; i < count; i++) {
-  //      if (code[i].type == OP_PUSH_STRING) {
-  //          free(code[i].chars);
-  //      }
-  //  }
+  for (size_t i = 0; i < p->inst_count; i++) {
+    Inst inst = p->inst[i];
+    if (inst.type == OP_PUSH_STR) {
+      free(inst.chars);
+    }
+  }
   if (p->inst != NULL) {
     free(p->inst);
   }
   free(p);
-}
-
-void vm_heap_free(VM *vm) {
-  if (vm->heap.used == 0)
-    return;
-  HeapBlock *b = vm->heap.current;
-  while (b) {
-    HeapBlock *next = b->next;
-    free(b->data);
-    free(b);
-    b = next;
-  }
 }
 
 char *vm_strdup(const char *src) {
@@ -956,7 +1071,7 @@ void vm_inst_errorf(const Inst *inst, const char *fmt, ...) {
   exit(1);
 }
 
-void vm_errorf(const char *fmt, ...) {
+void vm_panic(const char *fmt, ...) {
   fprintf(stderr, "\n=== ERROR ===\n");
 
   va_list ap;
@@ -1053,59 +1168,58 @@ inline int vm_val_is_eq(Value a, Value b) {
   }
 }
 // Useful when debugging
-// void vm_print_stack_top(const VM *vm) {
-//   printf("=== STACK (top 10) sp[%ld] ===\n", vm->sp);
-//   vm_print_mem_usage(vm);
-//
-//   size_t count = vm->sp < 10 ? vm->sp : 10;
-//   for (size_t i = 0; i < count; i++) {
-//     size_t idx = vm->sp - 1 - i;
-//     Value v = vm->stack[idx];
-//     // +1 from idx
-//     if (idx == vm->fp - 1) {
-//       printf("---------fp[%ld]---------\n", vm->fp);
-//     }
-//     printf("[%2ld] ", idx);
-//
-//     switch (v.type) {
-//     case VAL_CALLABLE:
-//       if (v.as.fn->type == CALLABLE_NATIVE) {
-//         printf("func %s()\n", v.as.fn->name);
-//       } else {
-//         printf("func ip:%ld()\n", v.as.fn->as.entry_ip);
-//       }
-//       break;
-//     case VAL_NIL:
-//       printf("NIL\n");
-//       break;
-//     case VAL_INT:
-//       printf("INT    %ld\n", v.as.i);
-//       break;
-//     case VAL_DOUBLE:
-//       printf("DOUBLE    %f\n", v.as.d);
-//       break;
-//     case VAL_ARRAY:
-//       printf("ARRAY(%ld)\n", v.as.arr->len);
-//       break;
-//     case VAL_OBJECT:
-//       printf("OBJECT(%ld)\n", v.as.obj->len);
-//       break;
-//
-//     case VAL_STR:
-//       printf("STRING \"%s\"\n", v.as.str->chars);
-//       break;
-//     case VAL_TYPE_END:
-//     default:
-//       printf("UNKNOWN\n");
-//       break;
-//     }
-//   }
-//
-//   if (vm->sp == 0)
-//     printf("(stack empty)\n");
-//
-//   printf("======================\n");
-// }
+void vm_print_stack_top(const VM *vm) {
+  printf("=== STACK (top 20) sp[%ld] ===\n", vm->sp);
+
+  size_t count = vm->sp < 20 ? vm->sp : 20;
+  for (size_t i = 0; i < count; i++) {
+    size_t idx = vm->sp - 1 - i;
+    Value v = vm->stack[idx];
+    // +1 from idx
+    if (idx == vm->fp - 1) {
+      printf("---------fp[%ld]---------\n", vm->fp);
+    }
+    printf("[%2ld] ", idx);
+
+    switch (v.type) {
+    case VAL_CALLABLE:
+      if (v.as.fn->type == CALLABLE_NATIVE) {
+        printf("func %s()\n", v.as.fn->name);
+      } else {
+        printf("func ip:%ld()\n", v.as.fn->as.entry_ip);
+      }
+      break;
+    case VAL_NIL:
+      printf("NIL\n");
+      break;
+    case VAL_INT:
+      printf("INT    %ld\n", v.as.i);
+      break;
+    case VAL_DOUBLE:
+      printf("DOUBLE    %f\n", v.as.d);
+      break;
+    case VAL_ARRAY:
+      printf("ARRAY(%ld)\n", v.as.arr->len);
+      break;
+    case VAL_OBJECT:
+      printf("OBJECT(%ld)\n", v.as.obj->len);
+      break;
+
+    case VAL_STR:
+      printf("STRING \"%s\"\n", v.as.str->chars);
+      break;
+    case VAL_TYPE_END:
+    default:
+      printf("UNKNOWN\n");
+      break;
+    }
+  }
+
+  if (vm->sp == 0)
+    printf("(stack empty)\n");
+
+  printf("======================\n");
+}
 
 Value vm_new_int(int64_t val) { return (Value){.type = VAL_INT, .as.i = val}; }
 
@@ -1114,41 +1228,35 @@ Value vm_new_double(double val) {
 }
 
 Value vm_object_new(VM *vm, size_t initial_cap) {
-  Object *o = vm_heap_alloc(&vm->heap, sizeof(Object), alignof(Object));
-
-  o->h.kind = OBJ_OBJECT;
-  o->h.size = sizeof(Object);
-
+  Object *o = vm_gc_alloc(vm, sizeof(Object), OBJ_OBJECT);
+  size_t cap = initial_cap < 1 ? 8 : initial_cap;
+  size_t cap_bytes = cap * sizeof(ObjEntry);
   o->len = 0;
-  o->cap = initial_cap;
   o->proto = NULL;
-
-  if (initial_cap > 0) {
-    o->entries = vm_heap_alloc(&vm->heap, initial_cap * sizeof(ObjEntry),
-                               alignof(ObjEntry));
-  } else {
-    o->entries = NULL;
-  }
-
+  o->cap = cap;
+  o->entries = malloc(cap_bytes);
+  vm->heap.bytes_allocated += cap_bytes;
   return (Value){.type = VAL_OBJECT, .as.obj = o};
 }
+
 void vm_object_grow(VM *vm, Object *o, size_t needed_size) {
-  assert(needed_size != 0);
-
-  if (needed_size >= o->cap) {
-    ObjEntry *new_entries = vm_heap_alloc(
-        &vm->heap, needed_size * sizeof(ObjEntry), alignof(ObjEntry));
-
-    if (o->entries) {
-      memmove(new_entries, o->entries, o->len * sizeof(ObjEntry));
-    }
-
-    o->entries = new_entries;
-    o->cap = needed_size;
-
-    o->h.size = sizeof(Object) + o->cap * sizeof(ObjEntry);
-    // old buffer becomes garbage (GC later)
+  if (needed_size <= o->cap)
+    return;
+  size_t old_bytes = o->cap * sizeof(ObjEntry);
+  size_t new_cap = o->cap < 1 ? 1 : o->cap;
+  while (new_cap < needed_size) {
+    new_cap *= 2;
   }
+  size_t new_bytes = new_cap * sizeof(ObjEntry);
+  ObjEntry *entries = realloc(o->entries, new_cap * sizeof(ObjEntry));
+  if (!entries) {
+    vm_panic("object: failed to grow");
+  }
+  memset(entries + o->cap, 0, (new_cap - o->cap) * sizeof(ObjEntry));
+
+  o->entries = entries;
+  o->cap = new_cap;
+  vm->heap.bytes_allocated += new_bytes - old_bytes;
 }
 
 void vm_object_set(VM *vm, Object *o, const char *key, Value v) {
@@ -1161,14 +1269,10 @@ void vm_object_set(VM *vm, Object *o, const char *key, Value v) {
   }
 
   // grow if needed
-  if (o->len >= o->cap) {
-    size_t new_cap = o->cap ? o->cap * 2 : 8;
-    vm_object_grow(vm, o, new_cap);
+  if (o->len + 1 > o->cap) {
+    vm_object_grow(vm, o, o->len + 1);
   }
-  size_t keylen = strlen(key);
-  o->entries[o->len].key = vm_heap_alloc(&vm->heap, keylen + 1, alignof(char));
-  memcpy(o->entries[o->len].key, key, keylen);
-  o->entries[o->len].key[keylen] = '\0';
+  o->entries[o->len].key = vm_strdup(key);
   o->entries[o->len].value = v;
   o->len++;
 }
@@ -1191,11 +1295,10 @@ bool vm_object_get(Object *o, const char *key, Value *out) {
 void vm_object_del(Object *o, const char *key) {
   for (size_t i = 0; i < o->len; i++) {
     if (strcmp(o->entries[i].key, key) == 0) {
-
+      free(o->entries[i].key);
       for (size_t j = i; j < o->len - 1; j++) {
         o->entries[j] = o->entries[j + 1];
       }
-
       o->len--;
       return;
     }
@@ -1211,39 +1314,33 @@ size_t vm_array_len(Array *a) {
 }
 
 Value vm_array_new(VM *vm, size_t initial_cap) {
-  Array *a = vm_heap_alloc(&vm->heap, sizeof(Array), alignof(Array));
-
-  a->h.kind = OBJ_ARRAY;
-  a->h.size = sizeof(Array);
-  a->len = 0;
-  a->cap = initial_cap;
-  if (initial_cap == 0) {
-    a->items = NULL;
-  } else {
-    a->items =
-        vm_heap_alloc(&vm->heap, initial_cap * sizeof(Value), alignof(Value));
-  }
-
+  Array *a = vm_gc_alloc(vm, sizeof(Array), OBJ_ARRAY);
+  size_t cap = initial_cap < 1 ? 1 : initial_cap;
+  size_t cap_bytes = cap * sizeof(Value);
+  a->len = cap;
+  a->cap = cap;
+  a->items = calloc(cap, sizeof(Value));
+  vm->heap.bytes_allocated += cap_bytes;
   return (Value){.type = VAL_ARRAY, .as.arr = a};
 }
 
 void vm_array_grow_capacity(VM *vm, Array *a, size_t needed_size) {
-  assert(needed_size != 0);
-  if (needed_size > a->cap) {
+  size_t new_cap = needed_size < 1 ? 8 : a->cap;
+  if (new_cap >= a->cap)
+    return;
 
-    Value *new_items =
-        vm_heap_alloc(&vm->heap, needed_size * sizeof(Value), alignof(Value));
-
-    if (a->items) {
-      memmove(new_items, a->items, a->len * sizeof(Value));
-    }
-
-    a->items = new_items;
-    a->cap = needed_size;
-    a->h.size = sizeof(Array) + a->cap * sizeof(Value);
-
-    // old buffer becomes garbage (GC later)
+  size_t old_bytes = a->cap * sizeof(Value);
+  while (new_cap < needed_size) {
+    new_cap *= 2;
   }
+  size_t new_bytes = new_cap * sizeof(Value);
+  Value *items = realloc(a->items, new_bytes);
+
+  memset(items + a->cap, 0, (new_cap - a->cap) * sizeof(Value));
+
+  a->items = items;
+  a->cap = new_cap;
+  vm->heap.bytes_allocated += new_bytes - old_bytes;
 }
 
 void vm_array_set(VM *vm, Array *a, size_t index, Value v) {
@@ -1297,9 +1394,7 @@ String *vm_malloc_string(VM *vm, const char *s) {
   }
   size_t total_size = sizeof(String) + len + 1;
 
-  String *str = (String *)vm_heap_alloc(&vm->heap, total_size, alignof(String));
-  str->h.kind = OBJ_STRING;
-  str->h.size = total_size;
+  String *str = (String *)vm_gc_alloc(vm, total_size, OBJ_STRING);
   str->len = len;
   /* -------- pass 2: decode escapes -------- */
   char *out = str->chars;
@@ -1393,7 +1488,7 @@ size_t vm_value_char_len(Value *v) {
   case VAL_CALLABLE:
   case VAL_ARRAY:
   case VAL_OBJECT:
-    // fallthrough
+  // fallthrough
   case VAL_NIL:
   case VAL_TYPE_END:
   default:
@@ -1420,7 +1515,7 @@ size_t vm_append_value_as_str(char *out, size_t cap, size_t off, Value *v) {
   case VAL_CALLABLE:
   case VAL_ARRAY:
   case VAL_OBJECT:
-    // fallthrough
+  // fallthrough
   case VAL_NIL:
   case VAL_TYPE_END:
   default:
@@ -1438,26 +1533,8 @@ void vm_concat_val_as_string(Value *a, Value *b, char **out) {
   off = vm_append_value_as_str(*out, size, off, b);
 }
 
-size_t vm_memory_capacity(VM *vm) {
-  size_t total = 0;
-  if (vm->heap.current) {
-    for (HeapBlock *b = vm->heap.current; b; b = b->next) {
-      total += b->capacity;
-    }
-  }
-
-  return total;
-}
-
-size_t vm_used_memory(VM *vm) {
-  size_t used = 0;
-  if (vm->heap.current) {
-    for (HeapBlock *b = vm->heap.current; b; b = b->next) {
-      used += b->used;
-    }
-  }
-  return used;
-}
+size_t vm_gc_allocated(VM *vm) { return vm->heap.bytes_allocated; }
+size_t vm_gc_next_bytes(VM *vm) { return vm->heap.next_gc; }
 
 bool vm_has_shared_ext(const char *path) {
   const char *dot = strrchr(path, '.');
@@ -1473,12 +1550,7 @@ bool vm_has_shared_ext(const char *path) {
 
 Value vm_make_native(VM *vm, const char *name, NativeFn fn) {
   // NOTE: Callable must be pointer inside Value (Value.as.fn is Callable*)
-  Callable *c =
-      (Callable *)vm_heap_alloc(&vm->heap, sizeof(Callable), alignof(Callable));
-  if (!c) {
-    fprintf(stderr, "Out of memory allocating Callable\n");
-    exit(1);
-  }
+  Callable *c = (Callable *)vm_gc_alloc(vm, sizeof(Callable), OBJ_CALLABLE);
   c->name = name;
   c->type = CALLABLE_NATIVE;
   c->as.native = fn; // NativeFn is already a function pointer typedef
@@ -1525,21 +1597,21 @@ bool vm_load_and_push_lib(const char *path, VM *vm) {
   memmove(&get_ver_handle, &sym, sizeof(get_ver_handle));
   if (!sym) {
     // reject: no version function
-    vm_errorf("Import %s does not have a valid api version", path);
+    vm_panic("Import %s does not have a valid api version", path);
   }
 
   int lib_ver = get_ver_handle();
 
   if (lib_ver != PROLETER_API_VERSION) {
-    vm_errorf("Import %s api version mismatch, required version is %d got %d",
-              path, PROLETER_API_VERSION, lib_ver);
+    vm_panic("Import %s api version mismatch, required version is %d got %d",
+             path, PROLETER_API_VERSION, lib_ver);
   }
 
   sym = dlsym(handle, PROLETER_LIB_INIT_NAME);
   if (!sym) {
     fprintf(stderr, "dlsym failed: %s\n", dlerror());
     dlclose(handle);
-    vm_errorf("Import %s does not have register function", path);
+    vm_panic("Import %s does not have register function", path);
     return false;
   }
 

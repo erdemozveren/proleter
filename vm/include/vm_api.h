@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define PROLETER_DEBUG 1
 #define PROLETER_LIB_INIT_FN init_lib
 #define PROLETER_LIB_INIT_NAME "init_lib"
 #define PROLETER_API_VERSION 1
@@ -35,15 +36,6 @@ typedef enum {
 typedef int (*vm_api_version_fn)(void);
 typedef Value (*init_lib_fn)(VM *vm);
 typedef Value (*NativeFn)(VM *vm, size_t argc, Value *argv);
-
-struct Callable {
-  const char *name;
-  CallableType type;
-  union {
-    NativeFn native;
-    size_t entry_ip;
-  } as;
-};
 
 typedef struct Value {
   ValueType type;
@@ -101,10 +93,15 @@ size_t vm_array_len(Array *a);
  * Public helper
  * ========================= */
 
-void vm_errorf(const char *fmt, ...);
+void vm_print_stack_top(const VM *vm);
+void vm_panic(const char *fmt, ...);
 void vm_halt(VM *vm);
 
-size_t vm_memory_capacity(VM *vm);
-size_t vm_used_memory(VM *vm);
+size_t vm_gc_allocated(VM *vm);
+size_t vm_gc_next_bytes(VM *vm);
+void vm_gc_collect(VM *vm);
+void vm_gc_pause(VM *vm);
+void vm_gc_resume(VM *vm);
+void vm_gc_collect_if_needed(VM *vm);
 
 #endif

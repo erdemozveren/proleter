@@ -3,14 +3,14 @@
 
 #include "vm_api.h"
 
-#define PROLETER_DEBUG 0
-
 #define VM_STACK_MAX 65536
 #define VM_GLOBALS_MAX 65536
 #define VM_CALL_MAX 256
 #define VM_FN_MAX 256
 
 #define VM_HEAP_BLOCK_SIZE (1024 * 1024)
+#define VM_GC_START_THRESHOLD (1024 * 1024)
+#define VM_GC_GROW_FACTOR 2
 #define VM_ASSERT_TYPE(vm, v, ...)                                             \
   vm_assertType((vm), (v), __VA_ARGS__, VAL_TYPE_END)
 
@@ -29,11 +29,13 @@ typedef struct {
  * Internal object layouts
  * ========================= */
 
-typedef enum { OBJ_STRING = 1, OBJ_ARRAY, OBJ_OBJECT } ObjKind;
+typedef enum { OBJ_STRING = 1, OBJ_ARRAY, OBJ_OBJECT, OBJ_CALLABLE } ObjKind;
 
 typedef struct HeapObj {
-  uint8_t kind;
+  ObjKind kind;
+  bool marked;
   size_t size;
+  struct HeapObj *next;
 } HeapObj;
 
 typedef struct {
@@ -46,6 +48,16 @@ struct String {
   HeapObj h;
   size_t len;
   char chars[];
+};
+
+struct Callable {
+  HeapObj h;
+  const char *name;
+  CallableType type;
+  union {
+    NativeFn native;
+    size_t entry_ip;
+  } as;
 };
 
 struct Array {
@@ -77,17 +89,11 @@ typedef struct {
   size_t id;
 } BuiltinMap;
 
-typedef struct HeapBlock {
-  char *data;
-  size_t capacity;
-  size_t used;
-  struct HeapBlock *next;
-} HeapBlock;
-
 typedef struct {
-  HeapBlock *current;
-  size_t used;
-  size_t capacity;
+  HeapObj *objects;
+  size_t object_count;
+  size_t bytes_allocated;
+  size_t next_gc;
 } Heap;
 
 typedef struct {
@@ -180,7 +186,7 @@ typedef struct {
     int64_t operand;
     size_t u;
     double d;
-    String *str;
+    char *chars;
   };
   OpCode type;
   size_t source_line_num;
@@ -198,8 +204,8 @@ struct VM {
   CallFrame frames[VM_CALL_MAX];
   BuiltinMap builtin_map[VM_FN_MAX];
   Heap heap;
-  size_t builtin_count;
-  size_t symbol_count;
+  size_t gc_pause_count;
+  bool gc_requested;
   size_t frame_top;
   size_t sp;
   size_t fp;
@@ -251,8 +257,13 @@ void vm_array_grow_capacity(VM *vm, Array *a, size_t needed_size);
  * ========================= */
 
 size_t vm_align_up(size_t n, size_t align);
-HeapBlock *vm_heap_new_block(size_t min_size);
-void *vm_heap_alloc(Heap *h, size_t size, size_t align);
+void *vm_gc_alloc(VM *vm, size_t size, ObjKind kind);
+void vm_gc_free_obj(VM *vm, HeapObj *obj);
+void vm_gc_mark_roots(VM *vm);
+void vm_gc_sweep(VM *vm);
+void vm_gc_sweep_all(VM *vm);
+void vm_gc_mark_obj(HeapObj *obj);
+void vm_gc_mark_value(Value v);
 
 void vm_heap_free(VM *vm);
 void vm_free_program(Program *p);

@@ -1,13 +1,8 @@
 #ifndef VM_std_H
 #define VM_std_H
 
-#include <stdalign.h>
-#define _POSIX_C_SOURCE 200809L
-
+#define _POSIX_C_SOURCE 199309L
 #include "vm_api.h"
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -209,7 +204,7 @@ Value std_input_raw(VM *vm, size_t argc, Value *argv) {
   (void)vm;
 
   if (argc != 1 || argv[0].type != VAL_INT) {
-    vm_errorf("input_raw expects 1 integer argument");
+    vm_panic("input_raw expects 1 integer argument");
     return VM_NIL;
   }
 
@@ -221,7 +216,7 @@ Value std_input_nonblock(VM *vm, size_t argc, Value *argv) {
   (void)vm;
 
   if (argc != 1 || argv[0].type != VAL_INT) {
-    vm_errorf("input_nonblock expects 1 integer argument");
+    vm_panic("input_nonblock expects 1 integer argument");
     return VM_NIL;
   }
 
@@ -234,7 +229,7 @@ Value std_input_restore(VM *vm, size_t argc, Value *argv) {
   (void)argv;
 
   if (argc != 0) {
-    vm_errorf("input_restore expects 0 arguments");
+    vm_panic("input_restore expects 0 arguments");
     return VM_NIL;
   }
 
@@ -247,14 +242,14 @@ Value std_getchr(VM *vm, size_t argc, Value *argv) {
   (void)argv;
 
   if (argc != 0) {
-    vm_errorf("getchr expects 0 arguments");
+    vm_panic("getchr expects 0 arguments");
     return VM_NIL;
   }
 
   int ch = input_platform_read_char();
 
   if (ch == -2) {
-    vm_errorf("getchr failed");
+    vm_panic("getchr failed");
     return VM_NIL;
   }
 
@@ -264,7 +259,7 @@ Value std_cclear(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   (void)argv;
   if (argc != 0) {
-    vm_errorf("cclear expects 0 arguments");
+    vm_panic("cclear expects 0 arguments");
     return VM_NIL;
   }
 #ifdef _WIN32
@@ -279,13 +274,13 @@ Value std_cclear(VM *vm, size_t argc, Value *argv) {
 Value std_cmove(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc != 2) {
-    vm_errorf("cmove expects 2 arguments");
+    vm_panic("cmove expects 2 arguments");
     return VM_NIL;
   }
   Value x = argv[0];
   Value y = argv[1];
   if (x.type != VAL_INT || y.type != VAL_INT) {
-    vm_errorf("cmove expects integers");
+    vm_panic("cmove expects integers");
     return VM_NIL;
   }
 
@@ -298,7 +293,7 @@ Value std_cmove(VM *vm, size_t argc, Value *argv) {
 Value std_ccolor(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc != 2) {
-    vm_errorf("ccolor expects 2 arguments");
+    vm_panic("ccolor expects 2 arguments");
     return VM_NIL;
   }
 
@@ -306,12 +301,12 @@ Value std_ccolor(VM *vm, size_t argc, Value *argv) {
   Value bg = argv[1];
 
   if (fg.type != VAL_INT || bg.type != VAL_INT) {
-    vm_errorf("ccolor expects integers");
+    vm_panic("ccolor expects integers");
     return VM_NIL;
   }
 
   if (fg.as.i < 0 || fg.as.i > 7 || bg.as.i < 0 || bg.as.i > 7) {
-    vm_errorf("ccolor expects values in range 0..7");
+    vm_panic("ccolor expects values in range 0..7");
     return VM_NIL;
   }
 
@@ -324,7 +319,7 @@ Value std_creset(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   (void)argv;
   if (argc != 0) {
-    vm_errorf("creset expects 0 arguments");
+    vm_panic("creset expects 0 arguments");
     return VM_NIL;
   }
   printf("\033[0m");
@@ -336,7 +331,7 @@ Value std_print(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc == 0) {
     // keep behavior: require at least 1 arg
-    vm_errorf("print expects at least 1 argument");
+    vm_panic("print expects at least 1 argument");
     return VM_NIL;
   }
 
@@ -347,7 +342,7 @@ Value std_print(VM *vm, size_t argc, Value *argv) {
       printf("%ld", v.as.i);
       break;
     case VAL_CALLABLE:
-      printf("Function %s()", v.as.fn ? v.as.fn->name : "<fn?>");
+      printf("Function()");
       break;
     case VAL_DOUBLE:
       printf("%f", v.as.d);
@@ -383,20 +378,20 @@ Value std_println(VM *vm, size_t argc, Value *argv) {
 Value std_sleep(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc != 1) {
-    vm_errorf("sleep expects 1 argument");
+    vm_panic("sleep expects 1 argument");
     return VM_NIL;
   }
   Value v = argv[0];
   if (v.type != VAL_INT) {
-    vm_errorf("sleep expects int");
+    vm_panic("sleep expects int");
     return VM_NIL;
   }
   if (v.as.i <= 0) {
-    vm_errorf("Sleep time must be greater than 0");
+    vm_panic("Sleep time must be greater than 0");
     return VM_NIL;
   }
 
-  struct timespec ts;
+  struct timespec ts = {0};
   ts.tv_sec = v.as.i / 1000;
   ts.tv_nsec = (v.as.i % 1000) * 1000000L;
   nanosleep(&ts, NULL);
@@ -407,7 +402,7 @@ Value std_read_int(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   (void)argv;
   if (argc != 0) {
-    vm_errorf("read_int expects 0 arguments");
+    vm_panic("read_int expects 0 arguments");
     return vm_new_int(0);
   }
 
@@ -421,7 +416,7 @@ Value std_read_int(VM *vm, size_t argc, Value *argv) {
 Value std_printf(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc < 1) {
-    vm_errorf("printf expects at least 1 argument");
+    vm_panic("printf expects at least 1 argument");
     return VM_NIL;
   }
 
@@ -493,7 +488,7 @@ Value std_printf(VM *vm, size_t argc, Value *argv) {
 Value std_read_line(VM *vm, size_t argc, Value *argv) {
   (void)argv;
   if (argc != 0) {
-    vm_errorf("read_line expects 0 arguments");
+    vm_panic("read_line expects 0 arguments");
     return vm_new_string(vm, "");
   }
 
@@ -508,7 +503,7 @@ Value std_read_line(VM *vm, size_t argc, Value *argv) {
 
 Value std_to_string(VM *vm, size_t argc, Value *argv) {
   if (argc != 1 || argv[0].type != VAL_INT) {
-    vm_errorf("to_string expects 1 integer");
+    vm_panic("to_string expects 1 integer");
     return VM_NIL;
   }
 
@@ -528,10 +523,11 @@ extern Value PROLETER_LIB_INIT_FN(VM *vm) {
 
   Value stdv = vm_object_new(vm, 64);
   if (stdv.type != VAL_OBJECT) {
-    vm_errorf("vm_object_new did not return VAL_OBJECT for std");
+    vm_panic("vm_object_new did not return VAL_OBJECT for std");
     return VM_NIL;
   }
   Object *std = stdv.as.obj;
+
   vm_object_set(vm, std, "cclear", vm_make_native(vm, "cclear", std_cclear));
   vm_object_set(vm, std, "cmove", vm_make_native(vm, "cmove", std_cmove));
   vm_object_set(vm, std, "ccolor", vm_make_native(vm, "ccolor", std_ccolor));

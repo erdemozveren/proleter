@@ -409,7 +409,7 @@ Inst *vm_load_program(VM *vm, const char *path) {
       }
       s++; // quote
       vm_parse_string_literal(s, &strbuf, path, line);
-      in.str = vm_malloc_string(vm, strbuf);
+      in.chars = vm_strdup(strbuf);
       if (strbuf != NULL) {
         free(strbuf);
       }

@@ -22,7 +22,7 @@ int vm_api_version(void) { return PROLETER_API_VERSION; }
 Value std_abs(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc != 1 || argv[0].type != VAL_INT) {
-    vm_errorf("abs expects 1 int");
+    vm_panic("abs expects 1 int");
     return VM_NIL;
   }
   int64_t x = argv[0].as.i;
@@ -34,7 +34,7 @@ Value std_abs(VM *vm, size_t argc, Value *argv) {
 Value std_min(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc != 2 || argv[0].type != VAL_INT || argv[1].type != VAL_INT) {
-    vm_errorf("min expects 2 ints");
+    vm_panic("min expects 2 ints");
     return VM_NIL;
   }
   return vm_new_int(argv[0].as.i < argv[1].as.i ? argv[0].as.i : argv[1].as.i);
@@ -43,7 +43,7 @@ Value std_min(VM *vm, size_t argc, Value *argv) {
 Value std_max(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc != 2 || argv[0].type != VAL_INT || argv[1].type != VAL_INT) {
-    vm_errorf("max expects 2 ints");
+    vm_panic("max expects 2 ints");
     return VM_NIL;
   }
   return vm_new_int(argv[0].as.i > argv[1].as.i ? argv[0].as.i : argv[1].as.i);
@@ -53,7 +53,7 @@ Value std_clamp(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc != 3 || argv[0].type != VAL_INT || argv[1].type != VAL_INT ||
       argv[2].type != VAL_INT) {
-    vm_errorf("clamp expects 3 ints");
+    vm_panic("clamp expects 3 ints");
     return VM_NIL;
   }
 
@@ -73,7 +73,7 @@ Value std_rand(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   (void)argv;
   if (argc != 0) {
-    vm_errorf("rand expects 0 arguments");
+    vm_panic("rand expects 0 arguments");
     return VM_NIL;
   }
   int64_t r = (int64_t)rand();
@@ -83,7 +83,7 @@ Value std_rand(VM *vm, size_t argc, Value *argv) {
 Value std_rand_range(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc != 2 || argv[0].type != VAL_INT || argv[1].type != VAL_INT) {
-    vm_errorf("rand_range expects 2 ints");
+    vm_panic("rand_range expects 2 ints");
     return VM_NIL;
   }
 
@@ -91,7 +91,7 @@ Value std_rand_range(VM *vm, size_t argc, Value *argv) {
   int64_t hi = argv[1].as.i;
 
   if (lo > hi) {
-    vm_errorf("rand_range: lo > hi");
+    vm_panic("rand_range: lo > hi");
     return VM_NIL;
   }
 
@@ -107,21 +107,17 @@ Value std_rand_range(VM *vm, size_t argc, Value *argv) {
 
 extern Value PROLETER_LIB_INIT_FN(VM *vm) {
 
-  Value mathv = vm_object_new(vm, 64);
-  if (mathv.type != VAL_OBJECT) {
-    vm_errorf("vm_object_new did not return VAL_OBJECT for std");
-    return VM_NIL;
-  }
-  Object *m = mathv.as.obj;
-  vm_object_set(vm, m, "min", vm_make_native(vm, "min", std_min));
-  vm_object_set(vm, m, "max", vm_make_native(vm, "max", std_max));
-  vm_object_set(vm, m, "abs", vm_make_native(vm, "abs", std_abs));
-  vm_object_set(vm, m, "rand", vm_make_native(vm, "rand", std_rand));
-  vm_object_set(vm, m, "rand_range",
+  Value val = vm_object_new(vm, 64);
+  Object *o = val.as.obj;
+  vm_object_set(vm, o, "min", vm_make_native(vm, "min", std_min));
+  vm_object_set(vm, o, "max", vm_make_native(vm, "max", std_max));
+  vm_object_set(vm, o, "abs", vm_make_native(vm, "abs", std_abs));
+  vm_object_set(vm, o, "rand", vm_make_native(vm, "rand", std_rand));
+  vm_object_set(vm, o, "rand_range",
                 vm_make_native(vm, "rand_range", std_rand_range));
-  vm_object_set(vm, m, "clamp", vm_make_native(vm, "clamp", std_clamp));
+  vm_object_set(vm, o, "clamp", vm_make_native(vm, "clamp", std_clamp));
 
-  return mathv;
+  return val;
 }
 
 #endif

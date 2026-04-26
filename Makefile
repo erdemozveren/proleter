@@ -16,7 +16,7 @@ release: clean vm/main.c vm/include/vm.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(VM_SRCS) -o build/proleter-vm
 
-debug: vm/main.c runtime-libs
+debug: clean vm/main.c vm/include/vm.h runtime-libs
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(DEBUG_FLAGS) $(VM_SRCS) -o build/proleter-vm
 
