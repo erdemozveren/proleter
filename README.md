@@ -6,6 +6,8 @@ This project is mainly a learning exercise. The goal is to understand how byteco
 
 It is **not** meant to be fast, stable, complete, or production-ready.
 
+> Proleter -Turkish for proletarian-, referring to the working class — something practical, minimal, and built to work rather than to impress.
+
 ## Why
 
 Proleter exists to learn by building:
