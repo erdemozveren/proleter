@@ -24,6 +24,9 @@ Some helper code, examples, wording, and small implementation details were assis
 ## What it can do
 
 - Execute custom bytecode in a C VM
+- Simple Garbage Collection
+- **Emit C code and build native executables** (C backend)
+- Run example programs, including Rule 110
 - Use an operand stack and call frames
 - Work with values such as:
   - integers
@@ -36,11 +39,9 @@ Some helper code, examples, wording, and small implementation details were assis
 - Run arithmetic, comparison, logical, and jump instructions
 - Use local variables and globals
 - Call user functions and native functions
-- Allocate heap objects
 - Import small runtime/native modules
 - Compile a small language to bytecode
-- **Emit C code and build native executables** (C backend)
-- Run example programs, including Rule 110
+- TODO: Type checking isn’t strict yet — will enforce strict types later.
 
 ## CLI
 
@@ -84,7 +85,7 @@ proleter-lang/
 * Not a production VM
 * Not intended for real-world embedding
 
-Things may change or break often.
+Things may change or break often. This project is for fun and learning.
 
 ## Goal
 
