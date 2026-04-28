@@ -1,7 +1,8 @@
 "use strict";
-// TODO: add type check,make it more strict
+
 const fs = require("fs");
 const path = require("path");
+
 const EmitType = {
   c: Symbol("c"),
   bc: Symbol("bytecode"),
@@ -11,6 +12,54 @@ const TargetPlatform = {
   linux: Symbol("linux"),
   win32: Symbol("windows"),
 };
+
+const VALID_TYPES = new Set([
+  "int",
+  "double",
+  "bool",
+  "string",
+  "array",
+  "object",
+  "fn",
+  "nil",
+  "any",
+]);
+
+const STRING_CONVERTIBLE_TYPES = new Set([
+  "int",
+  "double",
+  "bool",
+  "string",
+  "nil",
+  "any",
+])
+
+function isAnyType(type) {
+  return type === "any";
+}
+
+function isNilType(type) {
+  return type === "nil";
+}
+
+function isNumericType(type) {
+  return type === "int" || type === "double" || type === "any";
+}
+
+function isAssignableType(to, from) {
+  if (to === from) return true;
+  if (isAnyType(to) || isAnyType(from)) return true;
+  if (to === "double" && from === "int") return true;
+  if (to === "bool" && from === "int") return true;
+  if (!isNilType(to) && isNilType(from)) return true;
+  return false;
+}
+
+function numericResultType(left, right) {
+  if (isAnyType(left) || isAnyType(right)) return "any";
+  if (left === "double" || right === "double") return "double";
+  return "int";
+}
 
 const OPCODE_ENUM = {
   nop: "OP_NOP",
@@ -100,14 +149,19 @@ const cInstValFields = ["operand", "u", "d", "chars", "op_type", "source_line_nu
 
 function makeCInstString(i) {
   if (!i.type) throw new Error("Instruction must have opcode type");
+
   let txt = ".type = " + i.type;
+
   Object.entries(i).forEach(([key, value]) => {
     if (key === "type") return;
+
     if (!cInstValFields.includes(key)) {
       throw new Error("Unknown instruction field " + key + " for " + i.type);
     }
+
     txt += ", ." + key + " = " + value;
   });
+
   return "{" + txt + "}";
 }
 
@@ -116,19 +170,36 @@ class Emitter {
     this.sourcePath = sourcePath;
     this.projectRoot = projectRoot;
     this.target = target || TargetPlatform[process.platform];
-    this.emitType = emit
+    this.emitType = emit;
     this.reset();
   }
 
   /* =========================
      PUBLIC
      ========================= */
+
   errorAt(node, message) {
     if (node && node.loc && node.loc.start) {
       const { line, column } = node.loc.start;
-      throw new Error(`${message} at line ${line}, column ${column}`);
+      throw new SyntaxError(`${message} at line ${line}, column ${column}`);
     }
-    throw new Error(message);
+
+    throw new SyntaxError(message);
+  }
+
+  checkVarTypeIsValid(typeName, node = null) {
+    if (!VALID_TYPES.has(typeName)) {
+      this.errorAt(
+        node,
+        `Unknown type '${typeName}'. Supported types: ${[...VALID_TYPES].join(", ")}`
+      );
+    }
+  }
+
+  checkAssignable(to, from, node = null) {
+    if (!isAssignableType(to, from)) {
+      this.errorAt(node, `Cannot assign '${from}' to '${to}'`);
+    }
   }
 
   compile(program) {
@@ -142,22 +213,18 @@ class Emitter {
 
     this.collectProgram(program);
 
-    // Precompute local slots for every function using minimal block-scoped name resolution
     for (const meta of this.functions.values()) {
       this.prepareFunctionMeta(meta);
     }
 
-    // Stable startup: always begin with __init
     this.emit("pushfn", "__init");
     this.emit("call", 0);
     this.emit("halt");
 
-    // User-defined functions
     for (const meta of this.functions.values()) {
       this.compileFunction(meta);
     }
 
-    // Synthetic top-level init / program body
     this.compileSyntheticInit(program.body);
 
     if (this.emitType === EmitType.bc) {
@@ -170,6 +237,7 @@ class Emitter {
           inst.u = this.getLabelPc(inst.lazyRef);
           delete inst.lazyRef;
         }
+
         return makeCInstString(inst);
       })
       .join(",");
@@ -196,11 +264,12 @@ class Emitter {
 
     this.program = null;
 
-    this.globals = new Map();            // global var name -> slot
-    this.functions = new Map();          // full function name -> meta
-    this.topLevelFunctions = new Map();  // short name -> full name
+    this.globals = new Map();
+    this.globalTypes = new Map();
+    this.functions = new Map();
+    this.topLevelFunctions = new Map();
 
-    this.current = null;                 // current codegen context
+    this.current = null;
   }
 
   /* =========================
@@ -208,23 +277,21 @@ class Emitter {
      ========================= */
 
   collectProgram(program) {
-    // Collect all globals from top-level executable code, recursively.
     for (const item of program.body) {
       if (item.type === "Function") continue;
       this.collectTopLevelGlobals(item);
     }
 
-    // Collect top-level function names.
     for (const item of program.body) {
       if (item.type === "Function") {
         if (this.topLevelFunctions.has(item.name)) {
           throw new Error(`Duplicate function '${item.name}'`);
         }
+
         this.topLevelFunctions.set(item.name, item.name);
       }
     }
 
-    // Collect all user functions recursively.
     for (const item of program.body) {
       if (item.type === "Function") {
         this.collectFunction(item, null);
@@ -317,13 +384,14 @@ class Emitter {
       parent: parentMeta,
       nestedVisible: new Map(),
 
-      // filled later by prepareFunctionMeta
+      paramTypes: fnNode.params.map((p) => this.typeFromTypeNode(p.varType)),
+      returnType: this.typeFromTypeNode(fnNode.returnType),
+
       localCount: 0,
-      localTypes: new Map(),   // slot -> type string
+      localTypes: new Map(),
       assignTempSlot: 0,
     };
 
-    // Collect nested functions visible from this function.
     this.collectNestedFunctionsInBlock(fnNode.body, meta);
 
     this.functions.set(fullName, meta);
@@ -335,9 +403,11 @@ class Emitter {
     for (const item of block.body) {
       if (item.type === "Function") {
         const nestedFull = `${parentMeta.fullName}$${item.name}`;
+
         if (parentMeta.nestedVisible.has(item.name)) {
           throw new Error(`Duplicate nested function '${item.name}' in '${parentMeta.fullName}'`);
         }
+
         parentMeta.nestedVisible.set(item.name, nestedFull);
         this.collectFunction(item, parentMeta);
         continue;
@@ -357,6 +427,7 @@ class Emitter {
 
       case "If":
         this.collectNestedFunctionsInBlock(stmt.then, parentMeta);
+
         if (stmt.else) {
           if (stmt.else.type === "Block") this.collectNestedFunctionsInBlock(stmt.else, parentMeta);
           else if (stmt.else.type === "If") this.collectNestedFunctionsInStmt(stmt.else, parentMeta);
@@ -380,8 +451,10 @@ class Emitter {
     if (this.globals.has(name)) {
       this.errorAt(node, `Duplicate global '${name}'`);
     }
+
     const slot = this.globals.size;
     this.globals.set(name, slot);
+    this.globalTypes.set(name, "any");
     return slot;
   }
 
@@ -391,27 +464,37 @@ class Emitter {
 
   prepareFunctionMeta(meta) {
     const scopeStack = [];
-    const localTypes = new Map(); // slot -> type
+    const localTypes = new Map();
     let nextLocalSlot = 0;
 
     const pushScope = () => scopeStack.push(new Map());
+
     const popScope = () => {
       if (scopeStack.length === 0) throw new Error("Internal: pop empty prepass scope");
       scopeStack.pop();
     };
+
     const currentScope = () => {
       const s = scopeStack[scopeStack.length - 1];
       if (!s) throw new Error("Internal: no current prepass scope");
       return s;
     };
+
     const declareLocal = (name, typeNode = null, node = null) => {
       const scope = currentScope();
+
       if (scope.has(name)) {
         this.errorAt(node, `Duplicate local '${name}'`);
       }
+
       const slot = nextLocalSlot++;
+      const typeName = this.typeFromTypeNode(typeNode);
+
+      this.checkVarTypeIsValid(typeName, node);
+
       scope.set(name, slot);
-      localTypes.set(slot, this.typeFromTypeNode(typeNode));
+      localTypes.set(slot, typeName);
+
       return slot;
     };
 
@@ -468,6 +551,7 @@ class Emitter {
         case "If":
           collectExpr(s.cond);
           collectBlock(s.then, true);
+
           if (s.else) {
             if (s.else.type === "Block") collectBlock(s.else, true);
             else if (s.else.type === "If") collectStmt(s.else);
@@ -480,13 +564,16 @@ class Emitter {
           return;
 
         case "For":
-          pushScope(); // loop scope for init variable
+          pushScope();
+
           if (s.init) {
             if (s.init.type === "VarDecl") collectStmt(s.init);
             else collectExpr(s.init);
           }
+
           if (s.cond) collectExpr(s.cond);
           if (s.step) collectExpr(s.step);
+
           collectBlock(s.body, true);
           popScope();
           return;
@@ -533,21 +620,22 @@ class Emitter {
       if (pushNewScope) popScope();
     };
 
-    // Function scope
     pushScope();
+    for (const typeName of meta.paramTypes) {
+      this.checkVarTypeIsValid(typeName, meta.ast);
+    }
 
-    // Params live in function scope
+    this.checkVarTypeIsValid(meta.returnType, meta.ast);
     for (const p of meta.ast.params) {
       if (p.type !== "Param") {
         this.errorAt(p, "Expected Param node");
       }
+
       p._slot = declareLocal(p.name, p.varType, p);
     }
 
-    // Function body declarations at top level belong to function scope
     collectBlock(meta.ast.body, false);
 
-    // One hidden temp slot per function for assignment-expression value preservation
     meta.assignTempSlot = nextLocalSlot++;
     localTypes.set(meta.assignTempSlot, "any");
 
@@ -664,6 +752,7 @@ class Emitter {
       default:
         throw new Error("Unimplemented op code: " + opcode);
     }
+
     inst.source_line_num = this.sourceLineNum;
     this.out.push(inst);
     this.pc += 1;
@@ -680,6 +769,7 @@ class Emitter {
       this.out.push(name + ":");
       return;
     }
+
     this.labelMap[name] = this.pc;
   }
 
@@ -691,6 +781,7 @@ class Emitter {
     if (!Object.prototype.hasOwnProperty.call(this.labelMap, name)) {
       throw new Error("Label " + name + " does not exist");
     }
+
     return this.labelMap[name];
   }
 
@@ -713,7 +804,8 @@ class Emitter {
 
   makeInitCodegenContext() {
     const localTypes = new Map();
-    localTypes.set(0, "any"); // hidden temp slot for __init assignment expressions
+    localTypes.set(0, "any");
+
     return {
       kind: "init",
       fullName: "__init",
@@ -733,9 +825,11 @@ class Emitter {
 
   popScope() {
     if (!this.current || this.current.kind !== "function") return;
+
     if (this.current.scopeStack.length === 0) {
       throw new Error("popScope on empty scope stack");
     }
+
     this.current.scopeStack.pop();
   }
 
@@ -743,16 +837,21 @@ class Emitter {
     if (!this.current || this.current.kind !== "function") {
       throw new Error("No active function scope");
     }
+
     const scope = this.current.scopeStack[this.current.scopeStack.length - 1];
+
     if (!scope) throw new Error("No current scope");
+
     return scope;
   }
 
   bindLocal(name, slot, node = null) {
     const scope = this.currentScope();
+
     if (scope.has(name)) {
       this.errorAt(node, `Duplicate local '${name}'`);
     }
+
     scope.set(name, slot);
   }
 
@@ -761,20 +860,30 @@ class Emitter {
 
     for (let i = this.current.scopeStack.length - 1; i >= 0; i--) {
       const scope = this.current.scopeStack[i];
+
       if (scope.has(name)) return scope.get(name);
     }
 
     return null;
   }
 
-  resolveVar(name) {
+  resolveVar(name, node = null) {
     const localSlot = this.resolveLocal(name);
+
     if (localSlot != null) {
-      return { kind: "local", slot: localSlot };
+      return {
+        kind: "local",
+        slot: localSlot,
+        type: this.current.localTypes.get(localSlot) || "any",
+      };
     }
 
     if (this.globals.has(name)) {
-      return { kind: "global", slot: this.globals.get(name) };
+      return {
+        kind: "global",
+        slot: this.globals.get(name),
+        type: this.globalTypes.get(name) || "any",
+      };
     }
 
     this.errorAt(node, `Unknown identifier '${name}'`);
@@ -792,10 +901,12 @@ class Emitter {
   resolveFunction(name) {
     if (this.current && this.current.functionMeta) {
       let meta = this.current.functionMeta;
+
       while (meta) {
         if (meta.nestedVisible.has(name)) {
           return meta.nestedVisible.get(name);
         }
+
         meta = meta.parent;
       }
     }
@@ -818,12 +929,14 @@ class Emitter {
 
   emitLoadName(name, node = null) {
     const ref = this.resolveVar(name, node);
+
     if (ref.kind === "local") this.emit("load", ref.slot);
     else this.emit("loadg", ref.slot);
   }
 
   emitStoreName(name, node = null) {
     const ref = this.resolveVar(name, node);
+
     if (ref.kind === "local") this.emit("store", ref.slot);
     else this.emit("storeg", ref.slot);
   }
@@ -834,37 +947,219 @@ class Emitter {
     if (t.type === "ArrayType") return "array";
     return "any";
   }
+  resolveFunctionMeta(name, node = null) {
+    const fullName = this.resolveFunction(name);
 
+    const meta = this.functions.get(fullName);
+    if (!meta) {
+      this.errorAt(node, `Unknown function '${name}'`);
+    }
+
+    return meta;
+  }
+
+  callExprType(callNode) {
+    // Only direct named function calls can be checked strictly for now.
+    // Example: add(1, 2)
+    //
+    // Dynamic calls like:
+    //   var f: fn = add
+    //   f(1, 2)
+    // stay "any" for now.
+    if (callNode.callee.type !== "Identifier") {
+      return "any";
+    }
+
+    if (!this.canResolveFunction(callNode.callee.name)) {
+      return "any";
+    }
+
+    const meta = this.resolveFunctionMeta(callNode.callee.name, callNode.callee);
+
+    if (callNode.args.length !== meta.paramTypes.length) {
+      this.errorAt(
+        callNode,
+        `Function '${callNode.callee.name}' expects ${meta.paramTypes.length} argument(s), got ${callNode.args.length}`
+      );
+    }
+
+    for (let i = 0; i < callNode.args.length; i++) {
+      const expectedType = meta.paramTypes[i];
+      const actualType = this.exprType(callNode.args[i]);
+
+      this.checkAssignable(expectedType, actualType, callNode.args[i]);
+    }
+
+    return meta.returnType;
+  }
   exprType(e) {
+    if (!e) return "any";
+
     switch (e.type) {
-      case "String": return "string";
-      case "Int": return "int";
-      case "Double": return "double";
-      case "Boolean": return "int";
-      case "Nil": return "any";
-      case "ArrayLiteral": return "array";
-      case "Identifier": {
-        try {
-          const ref = this.resolveVar(e.name);
-          if (ref.kind === "local") {
-            return this.current.localTypes.get(ref.slot) || "any";
-          }
-          return "any";
-        } catch {
-          return "any";
-        }
-      }
-      case "Assign":
-        return this.exprType(e.expr);
-      case "Binary":
-        if (e.op === "+") {
-          const lt = this.exprType(e.left);
-          const rt = this.exprType(e.right);
-          return (lt === "string" || rt === "string") ? "string" : "any";
-        }
+      case "String":
+        return "string";
+
+      case "Int":
         return "int";
+
+      case "Double":
+        return "double";
+
+      case "Boolean":
+        return "bool";
+
+      case "Nil":
+        return "nil";
+
+      case "ArrayLiteral":
+        return "array";
+
+      case "ImportExpr":
+        return "object";
+
+      case "Identifier": {
+        if (this.canResolveVar(e.name)) {
+          return this.resolveVar(e.name, e).type;
+        }
+
+        if (this.canResolveFunction(e.name)) {
+          return "fn";
+        }
+
+        this.errorAt(e, `Unknown identifier '${e.name}'`);
+      }
+
+      case "Assign":
+        return this.assignExprType(e);
+
+      case "Unary":
+        return this.unaryExprType(e);
+
+      case "Binary":
+        return this.binaryExprType(e);
+
+      case "Call":
+        return this.callExprType(e);
+
+      case "Member":
+        return "any";
+
+      case "Index": {
+        const objectType = this.exprType(e.object);
+        const indexType = this.exprType(e.index);
+
+        if (!isAssignableType("array", objectType) && !isAssignableType("string", objectType)) {
+          this.errorAt(e.object, `Cannot index value of type '${objectType}'`);
+        }
+
+        if (!isAssignableType("int", indexType)) {
+          this.errorAt(e.index, `Index must be int, got '${indexType}'`);
+        }
+
+        return "any";
+      }
+
       default:
         return "any";
+    }
+  }
+
+  assignExprType(a) {
+    const rhsType = this.exprType(a.expr);
+
+    if (a.target.type === "Identifier") {
+      const ref = this.resolveVar(a.target.name, a.target);
+      this.checkAssignable(ref.type, rhsType, a);
+      return ref.type;
+    }
+
+    if (a.target.type === "Index" || a.target.type === "Member") {
+      return rhsType;
+    }
+
+    this.errorAt(a.target, "Bad assignment target");
+  }
+
+  unaryExprType(e) {
+    const exprType = this.exprType(e.expr);
+
+    if (e.op === "-") {
+      if (!isNumericType(exprType)) {
+        this.errorAt(e, `Unary '-' requires number, got '${exprType}'`);
+      }
+
+      return exprType;
+    }
+
+    if (e.op === "!") {
+      if (!isAssignableType("bool", exprType)) {
+        this.errorAt(e, `Unary '!' requires bool, got '${exprType}'`);
+      }
+
+      return "bool";
+    }
+
+    this.errorAt(e, `Unsupported unary operator: ${e.op}`);
+  }
+
+  binaryExprType(e) {
+    const leftType = this.exprType(e.left);
+    const rightType = this.exprType(e.right);
+
+    switch (e.op) {
+      case "+": {
+        if (leftType === "string" || rightType === "string") {
+          if (!STRING_CONVERTIBLE_TYPES.has(leftType) || !STRING_CONVERTIBLE_TYPES.has(rightType)) {
+            this.errorAt(e, `Operator '+' cannot mix '${leftType}' and '${rightType}'`);
+          }
+
+          return "string";
+        }
+
+        if (!isNumericType(leftType) || !isNumericType(rightType)) {
+          this.errorAt(e, `Operator '+' requires numbers or strings, got '${leftType}' and '${rightType}'`);
+        }
+
+        return numericResultType(leftType, rightType);
+      }
+
+      case "-":
+      case "*":
+      case "/":
+      case "%": {
+        if (!isNumericType(leftType) || !isNumericType(rightType)) {
+          this.errorAt(e, `Operator '${e.op}' requires numbers, got '${leftType}' and '${rightType}'`);
+        }
+
+        return numericResultType(leftType, rightType);
+      }
+
+      case "==":
+      case "!=":
+        return "bool";
+
+      case "<":
+      case ">":
+      case "<=":
+      case ">=": {
+        if (!isNumericType(leftType) || !isNumericType(rightType)) {
+          this.errorAt(e, `Operator '${e.op}' requires numbers, got '${leftType}' and '${rightType}'`);
+        }
+
+        return "bool";
+      }
+
+      case "&&":
+      case "||": {
+        if (!isAssignableType("bool", leftType) || !isAssignableType("bool", rightType)) {
+          this.errorAt(e, `Operator '${e.op}' requires bool values, got '${leftType}' and '${rightType}'`);
+        }
+
+        return "bool";
+      }
+
+      default:
+        this.errorAt(e, `Unknown binary operator '${e.op}'`);
     }
   }
 
@@ -880,14 +1175,13 @@ class Emitter {
 
     this.current = ctx;
 
-    // function scope
     this.pushScope();
 
-    // replay param bindings using preassigned slots
     for (const p of meta.ast.params) {
       if (p.type !== "Param") {
         this.errorAt(p, "Expected Param node");
       }
+
       this.bindLocal(p.name, p._slot, p);
     }
 
@@ -927,6 +1221,7 @@ class Emitter {
   /* =========================
      STATEMENTS / BLOCKS
      ========================= */
+
   setSourceLine(node) {
     if (node && node.loc && node.loc.start) {
       const { line } = node.loc.start;
@@ -955,6 +1250,7 @@ class Emitter {
 
   compileStmt(s) {
     this.setSourceLine(s);
+
     switch (s.type) {
       case "VarDecl":
         return this.compileVarDecl(s);
@@ -974,11 +1270,22 @@ class Emitter {
       case "Continue":
         return this.compileContinue();
 
-      case "Return":
+      case "Return": {
+        const expectedReturnType =
+          this.current && this.current.functionMeta
+            ? this.current.functionMeta.returnType
+            : "any";
+
+        const actualReturnType = s.expr ? this.exprType(s.expr) : "nil";
+
+        this.checkAssignable(expectedReturnType, actualReturnType, s);
+
         if (s.expr) this.compileExpr(s.expr);
         else this.emit("pushnil");
+
         this.emit("ret");
         return;
+      }
 
       case "AsmStmt":
         return this.compileAsmStmt(s);
@@ -1006,19 +1313,27 @@ class Emitter {
     let slot = null;
     const isFunctionLocal = !!(this.current && this.current.kind === "function");
 
+    const declaredType = this.typeFromTypeNode(s.varType);
+    this.checkVarTypeIsValid(declaredType, s);
+
     if (isFunctionLocal) {
       if (typeof s._slot !== "number") {
         throw new Error(`Missing precomputed slot for local '${s.name}'`);
       }
+
       this.bindLocal(s.name, s._slot, s);
       slot = s._slot;
+    } else {
+      this.globalTypes.set(s.name, declaredType);
     }
 
     if (s.expr) {
+      const actualType = this.exprType(s.expr);
+      this.checkAssignable(declaredType, actualType, s);
       this.compileExpr(s.expr);
     } else if (s.varType && s.varType.type === "ArrayType") {
       this.emitAllocTypedArray(s.varType);
-    } else if (this.typeFromTypeNode(s.varType) === "string") {
+    } else if (declaredType === "string") {
       this.emit("pushs", JSON.stringify(""));
     } else {
       this.emit("pushnil");
@@ -1027,8 +1342,7 @@ class Emitter {
     if (isFunctionLocal) {
       this.emit("store", slot);
     } else {
-      // __init / top-level globals
-      this.emitStoreName(s.name);
+      this.emitStoreName(s.name, s);
     }
   }
 
@@ -1039,10 +1353,12 @@ class Emitter {
 
   getArrayDims(typeNode) {
     if (!typeNode || typeNode.type !== "ArrayType") return [1];
+
     const dims = (typeNode.dims || []).map((d) => {
       const v = Number(d);
       return Number.isFinite(v) && v > 0 ? v : 1;
     });
+
     return dims.length ? dims : [1];
   }
 
@@ -1107,7 +1423,6 @@ class Emitter {
     const L_step = this.newLabel("for_step");
     const L_end = this.newLabel("for_end");
 
-    // Loop scope for init variable
     if (this.current && this.current.kind === "function") {
       this.pushScope();
     }
@@ -1124,6 +1439,7 @@ class Emitter {
     this.loopStack.push({ breakLabel: L_end, continueLabel: L_step });
 
     this.label(L_cond);
+
     if (s.cond) {
       this.compileExpr(s.cond);
       this.emit("jz", L_end);
@@ -1132,6 +1448,7 @@ class Emitter {
     this.compileBlock(s.body, true);
 
     this.label(L_step);
+
     if (s.step) {
       this.compileExpr(s.step);
       this.emit("pop");
@@ -1149,19 +1466,24 @@ class Emitter {
 
   compileBreak() {
     const top = this.loopStack[this.loopStack.length - 1];
+
     if (!top) throw new Error("break used outside loop");
+
     this.emit("jmp", top.breakLabel);
   }
 
   compileContinue() {
     const top = this.loopStack[this.loopStack.length - 1];
+
     if (!top) throw new Error("continue used outside loop");
+
     this.emit("jmp", top.continueLabel);
   }
 
   /* =========================
      EXPRESSIONS
      ========================= */
+
   resolveModuleImportPath(spec, node = null) {
     if (!this.sourcePath) {
       throw new Error("sourcePath is required for imports");
@@ -1170,21 +1492,26 @@ class Emitter {
     const currentDir = path.dirname(this.sourcePath);
 
     const localPath = path.resolve(currentDir, spec);
-    const platformExt = this.target == TargetPlatform.linux ? '.so' : '.dll';
+    const platformExt = this.target === TargetPlatform.linux ? ".so" : ".dll";
+
     if (fs.existsSync(localPath + platformExt)) {
       return path.normalize(path.relative(this.projectRoot, localPath));
     }
 
     const modulePath = path.resolve(this.projectRoot, "modules", spec);
+
     if (fs.existsSync(modulePath + platformExt)) {
       return path.normalize(path.relative(this.projectRoot, modulePath));
     }
 
     this.errorAt(node, `Import not found: '${spec}'`);
   }
+
   compileExpr(e) {
     if (!e) throw new Error("Unsupported expression: undefined node");
+
     this.setSourceLine(e);
+
     switch (e.type) {
       case "Nil":
         this.emit("pushnil");
@@ -1206,21 +1533,24 @@ class Emitter {
         this.emit("pushs", JSON.stringify(e.value));
         return;
 
-      case "ImportExpr":
+      case "ImportExpr": {
         const resolved = this.resolveModuleImportPath(e.path, e);
         this.emit("pushs", JSON.stringify(resolved));
         this.emit("load_lib");
         return;
+      }
 
       case "Identifier": {
         if (this.canResolveVar(e.name)) {
           this.emitLoadName(e.name, e);
           return;
         }
+
         if (this.canResolveFunction(e.name)) {
           this.emit("pushfn", this.resolveFunction(e.name));
           return;
         }
+
         this.errorAt(e, `Unknown identifier '${e.name}'`);
       }
 
@@ -1243,6 +1573,7 @@ class Emitter {
         return;
 
       case "Index":
+        this.exprType(e);
         this.compileExpr(e.object);
         this.compileExpr(e.index);
         this.emit("array_get");
@@ -1257,6 +1588,8 @@ class Emitter {
   }
 
   compileUnary(e) {
+    this.unaryExprType(e);
+
     if (e.op === "-") {
       this.emit("pushi", 0);
       this.compileExpr(e.expr);
@@ -1275,6 +1608,8 @@ class Emitter {
   }
 
   compileBinary(e) {
+    const resultType = this.binaryExprType(e);
+
     if (e.op === "&&") return this.emitLogicalAnd(e.left, e.right);
     if (e.op === "||") return this.emitLogicalOr(e.left, e.right);
 
@@ -1282,9 +1617,7 @@ class Emitter {
     this.compileExpr(e.right);
 
     if (e.op === "+") {
-      const lt = this.exprType(e.left);
-      const rt = this.exprType(e.right);
-      this.emit((lt === "string" || rt === "string") ? "concat" : "add");
+      this.emit(resultType === "string" ? "concat" : "add");
       return;
     }
 
@@ -1335,10 +1668,14 @@ class Emitter {
   }
 
   compileCall(e) {
+    this.callExprType(e);
+
     this.compileExpr(e.callee);
+
     for (const arg of e.args) {
       this.compileExpr(arg);
     }
+
     this.emit("call", e.args.length);
   }
 
@@ -1362,6 +1699,7 @@ class Emitter {
     }
 
     indices.reverse();
+
     return { base: cur, indices };
   }
 
@@ -1369,9 +1707,14 @@ class Emitter {
     const t = a.target;
 
     if (t.type === "Identifier") {
+      const ref = this.resolveVar(t.name, t);
+      const rhsType = this.exprType(a.expr);
+
+      this.checkAssignable(ref.type, rhsType, a);
+
       this.compileExpr(a.expr);
       this.emit("dup");
-      this.emitStoreName(t.name);
+      this.emitStoreName(t.name, t);
       return;
     }
 
@@ -1388,24 +1731,37 @@ class Emitter {
 
   compileIndexAssignExpr(target, rhs) {
     const { base, indices } = this.splitIndexChain(target);
+
     if (!base || !indices.length) {
       throw new Error("Bad index assignment target");
     }
 
+    const baseType = this.exprType(base);
+
+    if (!isAssignableType("array", baseType)) {
+      this.errorAt(base, `Cannot assign by index on type '${baseType}'`);
+    }
+
+    for (const index of indices) {
+      const indexType = this.exprType(index);
+
+      if (!isAssignableType("int", indexType)) {
+        this.errorAt(index, `Index must be int, got '${indexType}'`);
+      }
+    }
+
     const tmp = this.current.assignTempSlot;
 
-    // parent container
     this.compileExpr(base);
+
     for (let i = 0; i < indices.length - 1; i++) {
       this.compileExpr(indices[i]);
       this.emit("array_get");
     }
 
-    // final index + rhs
     this.compileExpr(indices[indices.length - 1]);
     this.compileExpr(rhs);
 
-    // preserve assignment result
     this.emit("dup");
     this.emit("store", tmp);
 
@@ -1436,7 +1792,7 @@ class Emitter {
       "-": "sub",
       "*": "mul",
       "/": "div",
-      "%": "div", // TODO: replace when add modulo opcode
+      "%": "div",
       "==": "eq",
       "!=": "neq",
       "<": "lt",
@@ -1446,6 +1802,7 @@ class Emitter {
     };
 
     if (!m[op]) throw new Error("Unknown binary op: " + op);
+
     return m[op];
   }
 
@@ -1475,6 +1832,7 @@ class Emitter {
 
     const [opcode, ...rawOperands] = parts;
     const operands = rawOperands.map((x) => this.parseAsmOperand(x));
+
     this.emit(opcode, ...operands);
   }
 
