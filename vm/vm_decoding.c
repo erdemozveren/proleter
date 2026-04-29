@@ -56,32 +56,41 @@ bool vm_parse_string_literal(const char *p, char **out, const char *path,
 
   while (*p) {
     if (*p == '\\') {
+      p++; // skip backslash
+
       if (!*p) {
         vm_compile_errorf(path, line,
                           "unterminated escape sequence in string literal");
         return false;
       }
-      p++;
-      len++;
+
+      p++; // skip escaped char
+      len += 2;
       continue;
     }
 
     if (*p == '"') {
-      if (!vm_is_eol_or_eof(*(++p))) {
+      p++; // skip closing quote
+
+      if (!vm_is_eol_or_eof(*p)) {
         vm_compile_errorf(
             path, line,
             "syntax error in string declaration, expecting end-of-input");
+        return false;
       }
+
       if (out) {
         char *buf = malloc(len + 1);
         if (!buf) {
           vm_compile_errorf(path, line, "out of memory");
           return false;
         }
+
         memcpy(buf, start, len);
         buf[len] = '\0';
         *out = buf;
       }
+
       return true;
     }
 
