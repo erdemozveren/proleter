@@ -1684,7 +1684,7 @@ class Emitter {
   }
 
   compileArrayLiteral(node) {
-    this.emit("pushi", 0);
+    this.emit("pushi", node.elements.length);
     this.emit("array_new");
 
     for (const el of node.elements) {
@@ -1693,7 +1693,7 @@ class Emitter {
     }
   }
   compileObjectLiteral(node) {
-    this.emit("pushi", 0);
+    this.emit("pushi", node.properties.length);
     this.emit("object_new");
     for (const el of node.properties) {
       const keyType = this.exprType(el.key);

@@ -390,7 +390,7 @@ ArrayLiteral
     }
 
 ObjectLiteral
-  = "{" _ props:ObjectPropertyList? _ "}" {
+  = "{" _ props:ObjectPropertyList? _ trailing:("," _)? "}"{
       return {
         type: "ObjectLiteral",
         properties: props || []
@@ -462,7 +462,14 @@ IdentCont
   = [a-zA-Z0-9_]
 
 Comment
-  = "//" (!"\n" .)* ("\n" / !.)
+  = LineComment
+  / BlockComment
+
+LineComment
+  = "//" (!("\n" / "\r") .)*
+
+BlockComment
+  = "/*" (!"*/" .)* "*/"
 
 _
   = (Whitespace / Comment)*

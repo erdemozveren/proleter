@@ -17,9 +17,6 @@ endif
 
 syntax case match
 
-" Comments
-syntax match proleterComment "//.*$"
-
 " Strings
 syntax region proleterString start=+"+ skip=+\\"+ end=+"+
 
@@ -64,10 +61,14 @@ syntax match proleterOperator "<="
 syntax match proleterOperator ">="
 syntax match proleterOperator "||"
 syntax match proleterOperator "&&"
-syntax match proleterOperator "[+\-*\/%=<>!]"
+syntax match proleterOperator "[-+*/%=<>!]"
 
 " Delimiters
 syntax match proleterDelimiter "[()[\]{},:;]"
+
+" Comments - put near the end
+syntax region proleterComment start="/\*" end="\*/" keepend contains=@Spell
+syntax match proleterComment "//.*$" contains=@Spell
 
 highlight def link proleterComment Comment
 highlight def link proleterString String
