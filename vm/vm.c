@@ -676,11 +676,10 @@ int vm_inst_execute(VM *vm, const Inst inst) {
     Value arr = vm_pop(vm);
     VM_ASSERT_TYPE(vm, &arr, VAL_ARRAY);
     VM_ASSERT_TYPE(vm, &v, VAL_INT);
-    if (v.as.i < 0 || v.as.i > (int64_t)arr.as.arr->len - 1) {
-      vm_inst_errorf(&inst, "array_get index out of bounds, idx:%i len:%d",
-                     v.as.i, arr.as.arr->len);
+    if (v.as.i < 0) {
+      vm_inst_errorf(&inst, "Array index cannot be negative");
     }
-    vm_push(vm, arr.as.arr->items[v.as.u]);
+    vm_push(vm, vm_array_get(arr.as.arr, (size_t)v.as.i));
     vm->ip += 1;
 
     break;
@@ -1242,6 +1241,13 @@ Value vm_object_new(VM *vm, size_t initial_cap) {
   return (Value){.type = VAL_OBJECT, .as.obj = o};
 }
 
+void vm_object_iter(Object *o, vm_object_iter_fn fn, void *user_data) {
+  size_t len = o->len;
+  for (size_t i = 0; i < len; i++) {
+    fn(o->entries[i].key, o->entries[i].value, user_data);
+  }
+}
+
 void vm_object_grow(VM *vm, Object *o, size_t needed_size) {
   if (needed_size <= o->cap)
     return;
@@ -1359,6 +1365,12 @@ void vm_array_set(VM *vm, Array *a, size_t index, Value v) {
     a->len++;
   }
   a->items[index] = v;
+}
+Value vm_array_get(Array *a, size_t index) {
+  if (index > a->len - 1) {
+    vm_panic("array_get index out of bounds, idx:%i len:%d", index, a->len);
+  }
+  return a->items[index];
 }
 
 void vm_array_push(VM *vm, Array *a, Value v) {

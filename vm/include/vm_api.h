@@ -5,10 +5,19 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PROLETER_DEBUG 0
-#define PROLETER_LIB_INIT_FN init_lib
-#define PROLETER_LIB_INIT_NAME "init_lib"
 #define PROLETER_API_VERSION 1
+
+#ifndef PROLETER_DEBUG
+#define PROLETER_DEBUG 0
+#endif
+
+#ifndef PROLETER_LIB_INIT_FN
+#define PROLETER_LIB_INIT_FN init_lib
+#endif
+
+#ifndef PROLETER_LIB_INIT_NAME
+#define PROLETER_LIB_INIT_NAME "init_lib"
+#endif
 
 typedef struct VM VM;
 typedef struct String String;
@@ -36,6 +45,7 @@ typedef enum {
 typedef int (*vm_api_version_fn)(void);
 typedef Value (*init_lib_fn)(VM *vm);
 typedef Value (*NativeFn)(VM *vm, size_t argc, Value *argv);
+typedef void (*vm_object_iter_fn)(const char *key, Value val, void *user_data);
 
 typedef struct Value {
   ValueType type;
@@ -78,6 +88,8 @@ Value vm_object_new(VM *vm, size_t initial_cap);
 void vm_object_set(VM *vm, Object *o, const char *key, Value v);
 bool vm_object_get(Object *o, const char *key, Value *out);
 void vm_object_del(Object *o, const char *key);
+void vm_object_iter(Object *o, vm_object_iter_fn fn, void *ud);
+size_t vm_object_len(Object *a);
 
 /* =========================
  * Array values
@@ -86,6 +98,7 @@ void vm_object_del(Object *o, const char *key);
 Value vm_array_new(VM *vm, size_t initial_cap);
 void vm_array_set(VM *vm, Array *a, size_t index, Value v);
 void vm_array_push(VM *vm, Array *a, Value v);
+Value vm_array_get(Array *a, size_t index);
 void vm_array_del(Array *a, size_t index);
 size_t vm_array_len(Array *a);
 
