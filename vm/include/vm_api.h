@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PROLETER_DEBUG 1
+#define PROLETER_DEBUG 0
 #define PROLETER_LIB_INIT_FN init_lib
 #define PROLETER_LIB_INIT_NAME "init_lib"
 #define PROLETER_API_VERSION 1

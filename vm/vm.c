@@ -582,7 +582,10 @@ int vm_inst_execute(VM *vm, const Inst inst) {
     break;
   }
   case OP_OBJECT_NEW: {
-    vm_push(vm, vm_object_new(vm, 0));
+    vm_assert_min_stack(vm, 1);
+    Value v = vm_pop(vm);
+    VM_ASSERT_TYPE(vm, &v, VAL_INT);
+    vm_push(vm, vm_object_new(vm, v.as.u));
     vm->ip += 1;
     break;
   }

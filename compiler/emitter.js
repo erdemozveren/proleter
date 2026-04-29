@@ -114,6 +114,7 @@ const OPCODE_ENUM = {
   array_set: "OP_ARRAY_SET",
   array_len: "OP_ARRAY_LEN",
 
+  object_new: "OP_OBJECT_NEW",
   object_get: "OP_OBJECT_GET",
   object_set: "OP_OBJECT_SET",
 
@@ -696,6 +697,7 @@ class Emitter {
       case "array_get":
       case "array_set":
       case "array_len":
+      case "object_new":
       case "object_get":
       case "object_set":
       case "load_lib":
@@ -1581,6 +1583,8 @@ class Emitter {
 
       case "ArrayLiteral":
         return this.compileArrayLiteral(e);
+      case "ObjectLiteral":
+        return this.compileObjectLiteral(e);
 
       default:
         this.errorAt(e, `Unsupported expression: ${e.type}`);
@@ -1688,6 +1692,20 @@ class Emitter {
       this.emit("array_push");
     }
   }
+  compileObjectLiteral(node) {
+    this.emit("pushi", 0);
+    this.emit("object_new");
+    for (const el of node.properties) {
+      const keyType = this.exprType(el.key);
+      if (!isAssignableType("string", keyType)) {
+        this.errorAt(index, `Object key must be string, got '${keyType}'`);
+      }
+      this.emit("pushs", JSON.stringify(el.key.value));
+      this.compileExpr(el.value);
+      this.emit("object_set");
+    }
+  }
+
 
   splitIndexChain(target) {
     const indices = [];
