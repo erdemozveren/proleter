@@ -150,6 +150,7 @@ static Value native_fs_write_file(VM *vm, size_t argc, Value *argv) {
    ------------------------- */
 
 static Value native_fs_append_file(VM *vm, size_t argc, Value *argv) {
+  (void)vm;
   if (argc != 2) {
     vm_panic("fs.appendFile(path, data) expects 2 arguments");
   }
