@@ -960,14 +960,86 @@ class Emitter {
     return meta;
   }
 
+  memberCallExprType(callNode) {
+    const member = callNode.callee;
+    const objectType = this.exprType(member.object);
+    const method = member.property;
+
+    if (objectType === "object") {
+      switch (method) {
+        case "keys":
+          if (callNode.args.length !== 0) {
+            this.errorAt(callNode, "object.keys() expects 0 arguments");
+          }
+          return "array";
+
+        case "values":
+          if (callNode.args.length !== 0) {
+            this.errorAt(callNode, "object.values() expects 0 arguments");
+          }
+          return "array";
+
+        case "has": {
+          if (callNode.args.length !== 1) {
+            this.errorAt(callNode, "object.has(key) expects 1 argument");
+          }
+
+          const keyType = this.exprType(callNode.args[0]);
+          this.checkAssignable("string", keyType, callNode.args[0]);
+
+          return "bool";
+        }
+
+        default:
+          return "any";
+      }
+    }
+
+    if (objectType === "array") {
+      switch (method) {
+        case "push":
+          if (callNode.args.length !== 1) {
+            this.errorAt(callNode, "array.push(value) expects 1 argument");
+          }
+          return "nil";
+
+        case "get": {
+          if (callNode.args.length !== 1) {
+            this.errorAt(callNode, "array.get(index) expects 1 argument");
+          }
+
+          const indexType = this.exprType(callNode.args[0]);
+          this.checkAssignable("int", indexType, callNode.args[0]);
+
+          return "any";
+        }
+
+        case "set": {
+          if (callNode.args.length !== 2) {
+            this.errorAt(callNode, "array.set(index, value) expects 2 arguments");
+          }
+
+          const indexType = this.exprType(callNode.args[0]);
+          this.checkAssignable("int", indexType, callNode.args[0]);
+
+          return "nil";
+        }
+
+        default:
+          return "any";
+      }
+    }
+
+    return "any";
+  }
+
   callExprType(callNode) {
-    // Only direct named function calls can be checked strictly for now.
-    // Example: add(1, 2)
-    //
-    // Dynamic calls like:
-    //   var f: fn = add
-    //   f(1, 2)
-    // stay "any" for now.
+    if (callNode.callee.type === "Member") {
+      return this.memberCallExprType(callNode);
+    }
+
+    // Direct named function calls:
+    // add(1, 2)
     if (callNode.callee.type !== "Identifier") {
       return "any";
     }
@@ -994,6 +1066,7 @@ class Emitter {
 
     return meta.returnType;
   }
+
   exprType(e) {
     if (!e) return "any";
 
@@ -1039,6 +1112,9 @@ class Emitter {
 
       case "Binary":
         return this.binaryExprType(e);
+
+      case "ObjectLiteral":
+        return "object";
 
       case "Call":
         return this.callExprType(e);
@@ -1569,10 +1645,7 @@ class Emitter {
         return this.compileCall(e);
 
       case "Member":
-        this.compileExpr(e.object);
-        this.emit("pushs", JSON.stringify(e.property));
-        this.emit("object_get");
-        return;
+        return this.compileMember(e);
 
       case "Index":
         this.exprType(e);
@@ -1671,8 +1744,147 @@ class Emitter {
     this.label(L_end);
   }
 
+  compileObjectMethodCall(e, member) {
+    switch (member.property) {
+      case "keys":
+        if (e.args.length !== 0) {
+          this.errorAt(e, "object.keys() expects 0 arguments");
+        }
+
+        this.compileExpr(member.object);
+        this.emit("pushs", JSON.stringify("keys"));
+        this.emit("object_get");
+        this.compileExpr(member.object);
+        this.emit("call", 1);
+        return;
+
+      case "values":
+        if (e.args.length !== 0) {
+          this.errorAt(e, "object.values() expects 0 arguments");
+        }
+
+        this.compileExpr(member.object);
+        this.emit("pushs", JSON.stringify("values"));
+        this.emit("object_get");
+        this.compileExpr(member.object);
+        this.emit("call", 1);
+        return;
+
+      case "has":
+        if (e.args.length !== 1) {
+          this.errorAt(e, "object.has(key) expects 1 argument");
+        }
+        this.compileExpr(member.object);
+        this.emit("pushs", JSON.stringify("has"));
+        this.emit("object_get");
+        this.compileExpr(member.object);
+        this.compileExpr(e.args[0]);
+        this.emit("call", 2);
+        return;
+
+      default:
+        // normal object property function call
+        this.compileExpr(member);
+
+        for (const arg of e.args) {
+          this.compileExpr(arg);
+        }
+
+        this.emit("call", e.args.length);
+        return;
+    }
+  }
+
+  compileArrayMethodCall(e, member) {
+    switch (member.property) {
+      case "push":
+        if (e.args.length !== 1) {
+          this.errorAt(e, "array.push(value) expects 1 argument");
+        }
+
+        this.compileExpr(member.object);
+        this.compileExpr(e.args[0]);
+        this.emit("array_push");
+        return;
+
+      case "get":
+        if (e.args.length !== 1) {
+          this.errorAt(e, "array.get(index) expects 1 argument");
+        }
+
+        this.compileExpr(member.object);
+        this.compileExpr(e.args[0]);
+        this.emit("array_get");
+        return;
+
+      case "set":
+        if (e.args.length !== 2) {
+          this.errorAt(e, "array.set(index, value) expects 2 arguments");
+        }
+        this.compileExpr(member.object);
+        this.compileExpr(e.args[0]);
+        this.compileExpr(e.args[1]);
+        this.emit("array_set");
+        return;
+
+      default:
+        this.errorAt(member, `Unknown array method '${member.property}'`);
+    }
+  }
+
+  isBuiltinMethod(objectType, name) {
+    if (objectType === "object") {
+      return ["keys", "values", "has"].includes(name);
+    }
+
+    if (objectType === "array") {
+      return ["push", "pop", "get", "set"].includes(name);
+    }
+
+    return false;
+  }
+
+  compileMethodCall(e) {
+    const member = e.callee;
+    const objectType = this.exprType(member.object);
+
+    if (objectType === "array") {
+      return this.compileArrayMethodCall(e, member);
+    }
+
+    if (objectType === "object") {
+      return this.compileObjectMethodCall(e, member);
+    }
+
+    // normal object property function call
+    this.compileExpr(member);
+
+    for (const arg of e.args) {
+      this.compileExpr(arg);
+    }
+
+    this.emit("call", e.args.length);
+  }
+
+  compileMember(e) {
+    const objectType = this.exprType(e.object);
+
+    if (objectType === "array" && e.property === "len") {
+      this.compileExpr(e.object);
+      this.emit("array_len");
+      return;
+    }
+
+    // normal object property access
+    this.compileExpr(e.object);
+    this.emit("pushs", JSON.stringify(e.property));
+    this.emit("object_get");
+  }
+
   compileCall(e) {
-    this.callExprType(e);
+    if (e.callee.type === "Member") {
+      return this.compileMethodCall(e);
+    }
 
     this.compileExpr(e.callee);
 
@@ -1692,6 +1904,7 @@ class Emitter {
       this.emit("array_push");
     }
   }
+
   compileObjectLiteral(node) {
     this.emit("pushi", node.properties.length);
     this.emit("object_new");

@@ -391,10 +391,10 @@ ArrayLiteral
 
 ObjectLiteral
   = "{" _ props:ObjectPropertyList? _ trailing:("," _)? "}"{
-      return {
+      return withLoc({
         type: "ObjectLiteral",
         properties: props || []
-      };
+      });
     }
 
 ObjectPropertyList

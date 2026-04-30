@@ -473,10 +473,10 @@ function peg$parse(input, options) {
     return withLoc({ type: "ArrayLiteral", elements: elements || [] });
   }
   function peg$f49(props, trailing) {
-    return {
+    return withLoc({
       type: "ObjectLiteral",
       properties: props || []
-    };
+    });
   }
   function peg$f50(head, tail) {
     return [head, ...tail.map(t => t[3])];
