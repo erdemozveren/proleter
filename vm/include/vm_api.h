@@ -77,7 +77,7 @@ size_t vm_string_len(String *s);
 
 Value vm_new_int(int64_t val);
 Value vm_new_double(double val);
-Value vm_new_string(VM *vm, char *str);
+Value vm_new_string(VM *vm, const char *str);
 Value vm_make_native(VM *vm, const char *name, NativeFn fn);
 
 /* =========================

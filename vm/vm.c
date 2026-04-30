@@ -696,9 +696,6 @@ int vm_inst_execute(VM *vm, const Inst inst) {
                      index.as.i, arr.as.arr->len);
     }
     vm_array_set(vm, arr.as.arr, index.as.u, v);
-    // if (index.as.u > arr.as.arr->len) {
-    //   arr.as.arr->len = index.as.u + 1;
-    // }
     vm_push(vm, arr);
     vm->ip += 1;
 
@@ -830,6 +827,7 @@ void vm_print_inst(const Inst *in) {
 }
 
 void vm_run_program(VM *vm) {
+  vm->object_proto = vm_make_object_proto(vm);
   while (!vm->halt && (vm->ip < vm->program->inst_count &&
                        vm->program->inst[vm->ip].type != OP_HALT)) {
     // printf("execute ip %d\n", vm->ip);
@@ -1229,12 +1227,76 @@ Value vm_new_double(double val) {
   return (Value){.type = VAL_DOUBLE, .as.d = val};
 }
 
+Value vm_native_object_keys(VM *vm, size_t argc, Value *argv) {
+
+  if (argc != 1)
+    vm_panic("object.keys expects object");
+
+  if (argv[0].type != VAL_OBJECT)
+    vm_panic("object.keys expects object");
+
+  Value arr = vm_array_new(vm, 0);
+  Object *o = argv[0].as.obj;
+  size_t len = o->len;
+  for (size_t i = 0; i < len; i++) {
+    vm_array_push(vm, arr.as.arr, vm_new_string(vm, o->entries[i].key));
+  }
+
+  return arr;
+}
+
+Value vm_native_object_has(VM *vm, size_t argc, Value *argv) {
+  (void)vm;
+  if (argc != 2)
+    vm_panic("object.has(obj,key)");
+
+  if (argv[0].type != VAL_OBJECT)
+    vm_panic("object.keys expects object");
+
+  if (argv[1].type != VAL_STR)
+    vm_panic("object.keys expects string");
+
+  return vm_new_int(
+      vm_object_get(argv[0].as.obj, vm_string_chars(argv[1].as.str), NULL) ? 1
+                                                                           : 0);
+}
+
+Value vm_native_object_values(VM *vm, size_t argc, Value *argv) {
+  (void)vm;
+  if (argc != 1)
+    vm_panic("object.values expects object");
+
+  if (argv[0].type != VAL_OBJECT)
+    vm_panic("object.values expects object");
+
+  Value arr = vm_array_new(vm, 0);
+  Object *o = argv[0].as.obj;
+  size_t len = o->len;
+  for (size_t i = 0; i < len; i++) {
+    vm_array_push(vm, arr.as.arr, o->entries[i].value);
+  }
+  return arr;
+}
+
+Object *vm_make_object_proto(VM *vm) {
+  Value object_proto = vm_object_new(vm, 4);
+  Object *o = object_proto.as.obj;
+
+  vm_object_set(vm, o, "keys",
+                vm_make_native(vm, "keys", vm_native_object_keys));
+  vm_object_set(vm, o, "has", vm_make_native(vm, "has", vm_native_object_has));
+  vm_object_set(vm, o, "values",
+                vm_make_native(vm, "values", vm_native_object_values));
+
+  return object_proto.as.obj;
+}
+
 Value vm_object_new(VM *vm, size_t initial_cap) {
   Object *o = vm_gc_alloc(vm, sizeof(Object), OBJ_OBJECT);
   size_t cap = initial_cap < 1 ? 8 : initial_cap;
   size_t cap_bytes = cap * sizeof(ObjEntry);
   o->len = 0;
-  o->proto = NULL;
+  o->proto = vm->object_proto;
   o->cap = cap;
   o->entries = malloc(cap_bytes);
   vm->heap.bytes_allocated += cap_bytes;
@@ -1289,7 +1351,9 @@ void vm_object_set(VM *vm, Object *o, const char *key, Value v) {
 bool vm_object_get(Object *o, const char *key, Value *out) {
   for (size_t i = 0; i < o->len; i++) {
     if (strcmp(o->entries[i].key, key) == 0) {
-      *out = o->entries[i].value;
+      if (out) {
+        *out = o->entries[i].value;
+      }
       return true;
     }
   }
@@ -1357,15 +1421,15 @@ void vm_array_grow_capacity(VM *vm, Array *a, size_t needed_size) {
 
 void vm_array_set(VM *vm, Array *a, size_t index, Value v) {
   if (index >= a->cap) {
-    size_t new_cap = a->cap ? a->cap * 2 : 4;
+    size_t new_cap = index ? index * 2 : 4;
     vm_array_grow_capacity(vm, a, new_cap);
   }
   if (index >= a->len) {
-    // if its adds a new elements
-    a->len++;
+    a->len = index + 1;
   }
   a->items[index] = v;
 }
+
 Value vm_array_get(Array *a, size_t index) {
   if (index > a->len - 1) {
     vm_panic("array_get index out of bounds, idx:%i len:%d", index, a->len);
@@ -1384,7 +1448,7 @@ void vm_array_push(VM *vm, Array *a, Value v) {
 void vm_array_del(Array *a, size_t index) {
   if (index + 1 > a->len && a->len > 0) {
     vm_inst_errorf(NULL,
-                   "Array try to delete item out of bound, idx:%ld len:%ld",
+                   "Array deleting an item out of bounds, idx:%ld len:%ld",
                    index, a->len);
   }
   if (index != a->len - 1) {
@@ -1448,7 +1512,7 @@ String *vm_malloc_string(VM *vm, const char *s) {
   return str;
 }
 
-Value vm_new_string(VM *vm, char *str) {
+Value vm_new_string(VM *vm, const char *str) {
   return (Value){.type = VAL_STR, .as.str = vm_malloc_string(vm, str)};
 }
 

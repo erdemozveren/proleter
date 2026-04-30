@@ -200,6 +200,7 @@ typedef struct {
 struct VM {
   Value stack[VM_STACK_MAX];
   Value globals[VM_GLOBALS_MAX];
+  Object *object_proto;
   Program *program;
   CallFrame frames[VM_CALL_MAX];
   BuiltinMap builtin_map[VM_FN_MAX];
@@ -250,6 +251,10 @@ size_t vm_append_value_as_str(char *out, size_t cap, size_t off, Value *v);
 void vm_concat_val_as_string(Value *a, Value *b, char **out);
 
 void vm_object_grow(VM *vm, Object *o, size_t needed_size);
+Object *vm_make_object_proto(VM *vm);
+Value vm_native_object_keys(VM *vm, size_t argc, Value *argv);
+Value vm_native_object_has(VM *vm, size_t argc, Value *argv);
+Value vm_native_object_values(VM *vm, size_t argc, Value *argv);
 void vm_array_grow_capacity(VM *vm, Array *a, size_t needed_size);
 
 /* =========================
