@@ -7,6 +7,9 @@ main:
   pushs "./modules/std"
   load_lib
   storeg 0
+  pushs "./modules/math"
+  load_lib
+  storeg 1
   # x 
   pushi 5
   store 0
@@ -18,6 +21,11 @@ main:
   # grid_SIZE 
   pushi 20
   store 3
+  loadg 0
+  pushs "inputRaw"
+  object_get
+  pushi 1
+  call 1
 
 loop:
   loadg 0
@@ -49,10 +57,10 @@ loop:
   call 2
   pop
 
-  # key = getchr()
+  # key = getChar()
 
   loadg 0
-  pushs "getchr"
+  pushs "getChar"
   object_get
   call 0
   store 2
@@ -119,7 +127,7 @@ move_right:
   jmp clamp_xy
 
 clamp_xy:
-  loadg 0
+  loadg 1
   pushs "clamp"
   object_get
   load 0
@@ -128,7 +136,7 @@ clamp_xy:
   call 3
   store 0
 
-  loadg 0
+  loadg 1
   pushs "clamp"
   object_get
   load 1

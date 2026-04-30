@@ -41,7 +41,7 @@ syntax match proleterFunction "\vfunc\s+\zs[A-Za-z_][A-Za-z0-9_]*"
 " Function calls
 syntax match proleterFunctionCall "\v[A-Za-z_][A-Za-z0-9_]*\ze\s*\("
 
-" Member calls/properties: math.rand_range
+" Member calls/properties: math.randRange
 syntax match proleterMember "\v\.[A-Za-z_][A-Za-z0-9_]*"
 
 " Array type suffix: int[], int[3]

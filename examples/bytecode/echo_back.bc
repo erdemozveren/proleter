@@ -21,7 +21,7 @@ loop:
   pushs "> "
   call 1
   pop
-  pushs "read_line"
+  pushs "readLine"
   object_get
   call
   dup

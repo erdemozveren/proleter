@@ -83,7 +83,7 @@ Value std_rand(VM *vm, size_t argc, Value *argv) {
 Value std_rand_range(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   if (argc != 2 || argv[0].type != VAL_INT || argv[1].type != VAL_INT) {
-    vm_panic("rand_range expects 2 ints");
+    vm_panic("randRange expects 2 ints");
     return VM_NIL;
   }
 
@@ -91,7 +91,7 @@ Value std_rand_range(VM *vm, size_t argc, Value *argv) {
   int64_t hi = argv[1].as.i;
 
   if (lo > hi) {
-    vm_panic("rand_range: lo > hi");
+    vm_panic("randRange: lo > hi");
     return VM_NIL;
   }
 
@@ -113,8 +113,8 @@ extern Value PROLETER_LIB_INIT_FN(VM *vm) {
   vm_object_set(vm, o, "max", vm_make_native(vm, "max", std_max));
   vm_object_set(vm, o, "abs", vm_make_native(vm, "abs", std_abs));
   vm_object_set(vm, o, "rand", vm_make_native(vm, "rand", std_rand));
-  vm_object_set(vm, o, "rand_range",
-                vm_make_native(vm, "rand_range", std_rand_range));
+  vm_object_set(vm, o, "randRange",
+                vm_make_native(vm, "randRange", std_rand_range));
   vm_object_set(vm, o, "clamp", vm_make_native(vm, "clamp", std_clamp));
 
   return val;

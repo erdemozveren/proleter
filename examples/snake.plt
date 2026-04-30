@@ -40,7 +40,7 @@ func drawWalls(width: int, height: int) {
 
 func main() {
   std.input_raw(true);
-  std.input_nonblock(true);
+  std.inputNonblocking(true);
   var startMsgShowed:int = 0;
   var gridWidth: int = 60;
   var gridHeight: int = 25;
@@ -62,8 +62,8 @@ func main() {
   var sy: int[3] = [10, 10, 10];
 
   // food
-  var fx: int = math.rand_range(2,gridWidth-1);
-  var fy: int = math.rand_range(2,gridHeight-1);
+  var fx: int = math.randRange(2,gridWidth-1);
+  var fy: int = math.randRange(2,gridHeight-1);
 
   while (true) {
     // Little hack for to feel vertical movements more accurate
@@ -101,7 +101,7 @@ func main() {
         std.print("A S D");
     }
     // input
-    var newKey: int = std.getchr();
+    var newKey: int = std.getChar();
     if(newKey != -1 || newKey != key){
         key = newKey;
     }
@@ -158,8 +158,8 @@ func main() {
       length++;
       sx[length - 1] = sx[length - 2];
       sy[length - 1] = sy[length - 2];
-      fx = math.rand_range(2,gridWidth-1);
-      fy = math.rand_range(2,gridHeight-1);
+      fx = math.randRange(2,gridWidth-1);
+      fy = math.randRange(2,gridHeight-1);
     }
     if(dy!=0){
       std.sleep(70);

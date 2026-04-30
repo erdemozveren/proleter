@@ -6,7 +6,7 @@ func main() {
   var str:string;
   while(true){
       std.print("> ");
-      str = std.read_line();
+      str = std.readLine();
       if(str == "exit"){
           std.println("Goodbye!");
           process.exit();

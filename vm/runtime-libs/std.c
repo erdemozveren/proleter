@@ -204,7 +204,7 @@ Value std_input_raw(VM *vm, size_t argc, Value *argv) {
   (void)vm;
 
   if (argc != 1 || argv[0].type != VAL_INT) {
-    vm_panic("input_raw expects 1 integer argument");
+    vm_panic("inputRaw expects 1 integer argument");
     return VM_NIL;
   }
 
@@ -216,7 +216,7 @@ Value std_input_nonblock(VM *vm, size_t argc, Value *argv) {
   (void)vm;
 
   if (argc != 1 || argv[0].type != VAL_INT) {
-    vm_panic("input_nonblock expects 1 integer argument");
+    vm_panic("inputNonblocking expects 1 integer argument");
     return VM_NIL;
   }
 
@@ -229,7 +229,7 @@ Value std_input_restore(VM *vm, size_t argc, Value *argv) {
   (void)argv;
 
   if (argc != 0) {
-    vm_panic("input_restore expects 0 arguments");
+    vm_panic("inputRestore expects 0 arguments");
     return VM_NIL;
   }
 
@@ -237,19 +237,18 @@ Value std_input_restore(VM *vm, size_t argc, Value *argv) {
   return VM_NIL;
 }
 
-Value std_getchr(VM *vm, size_t argc, Value *argv) {
+Value std_getchar(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   (void)argv;
 
   if (argc != 0) {
-    vm_panic("getchr expects 0 arguments");
+    vm_panic("getChar expects 0 arguments");
     return VM_NIL;
   }
 
   int ch = input_platform_read_char();
-
   if (ch == -2) {
-    vm_panic("getchr failed");
+    vm_panic("getChar failed");
     return VM_NIL;
   }
 
@@ -402,7 +401,7 @@ Value std_read_int(VM *vm, size_t argc, Value *argv) {
   (void)vm;
   (void)argv;
   if (argc != 0) {
-    vm_panic("read_int expects 0 arguments");
+    vm_panic("readInt expects 0 arguments");
     return vm_new_int(0);
   }
 
@@ -488,7 +487,7 @@ Value std_printf(VM *vm, size_t argc, Value *argv) {
 Value std_read_line(VM *vm, size_t argc, Value *argv) {
   (void)argv;
   if (argc != 0) {
-    vm_panic("read_line expects 0 arguments");
+    vm_panic("readLine expects 0 arguments");
     return vm_new_string(vm, "");
   }
 
@@ -503,7 +502,7 @@ Value std_read_line(VM *vm, size_t argc, Value *argv) {
 
 Value std_to_string(VM *vm, size_t argc, Value *argv) {
   if (argc != 1 || argv[0].type != VAL_INT) {
-    vm_panic("to_string expects 1 integer");
+    vm_panic("toString expects 1 integer");
     return VM_NIL;
   }
 
@@ -535,19 +534,19 @@ extern Value PROLETER_LIB_INIT_FN(VM *vm) {
   vm_object_set(vm, std, "print", vm_make_native(vm, "print", std_print));
   vm_object_set(vm, std, "println", vm_make_native(vm, "println", std_println));
   vm_object_set(vm, std, "printf", vm_make_native(vm, "printf", std_printf));
-  vm_object_set(vm, std, "read_int",
-                vm_make_native(vm, "read_int", std_read_int));
-  vm_object_set(vm, std, "read_line",
-                vm_make_native(vm, "read_line", std_read_line));
-  vm_object_set(vm, std, "to_string",
-                vm_make_native(vm, "to_string", std_to_string));
-  vm_object_set(vm, std, "getchr", vm_make_native(vm, "getchr", std_getchr));
-  vm_object_set(vm, std, "input_raw",
-                vm_make_native(vm, "input_raw", std_input_raw));
-  vm_object_set(vm, std, "input_nonblock",
-                vm_make_native(vm, "input_nonblock", std_input_nonblock));
-  vm_object_set(vm, std, "input_restore",
-                vm_make_native(vm, "input_restore", std_input_restore));
+  vm_object_set(vm, std, "readInt",
+                vm_make_native(vm, "readInt", std_read_int));
+  vm_object_set(vm, std, "readLine",
+                vm_make_native(vm, "readLine", std_read_line));
+  vm_object_set(vm, std, "toString",
+                vm_make_native(vm, "toString", std_to_string));
+  vm_object_set(vm, std, "getChar", vm_make_native(vm, "getChar", std_getchar));
+  vm_object_set(vm, std, "inputRaw",
+                vm_make_native(vm, "inputRaw", std_input_raw));
+  vm_object_set(vm, std, "inputNonblocking",
+                vm_make_native(vm, "inputNonblocking", std_input_nonblock));
+  vm_object_set(vm, std, "inputRestore",
+                vm_make_native(vm, "inputRestore", std_input_restore));
 
   vm_object_set(vm, std, "sleep", vm_make_native(vm, "sleep", std_sleep));
   return stdv;

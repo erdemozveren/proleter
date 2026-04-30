@@ -69,8 +69,8 @@ extern Value PROLETER_LIB_INIT_FN(VM *vm) {
 
   vm_object_set(vm, o, "allocated",
                 vm_make_native(vm, "allocated", prc_memory_allocated));
-  vm_object_set(vm, o, "next_gc",
-                vm_make_native(vm, "next_gc", prc_memory_next_gc));
+  vm_object_set(vm, o, "nextGc",
+                vm_make_native(vm, "nextGc", prc_memory_next_gc));
   vm_object_set(vm, o, "collect",
                 vm_make_native(vm, "collect", trigger_gc_collect));
   vm_object_set(vm, o, "rss", vm_make_native(vm, "rss", prc_memory_rss));

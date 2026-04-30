@@ -63,7 +63,7 @@ func drawGround(width: int, y: int) {
 }
 
 func gameOver(score: int, msg: string) {
-  std.input_nonblock(false);
+  std.inputNonblocking(false);
   std.cclear();
 
   std.cmove(3, 3);
@@ -106,10 +106,10 @@ func main() {
   var showHelp: int = 1;
 
   std.input_raw(1);
-  std.input_nonblock(1);
+  std.inputNonblocking(1);
 
   while (true) {
-    var key: int = std.getchr();
+    var key: int = std.getChar();
 
     if (key == keyQ) {
       std.input_restore();
@@ -143,7 +143,7 @@ func main() {
 
       if (pipeX[i] < 2) {
         pipeX[i] = width - 2;
-        pipeGapY[i] = math.rand_range(3, height - pipeGapSize - 3);
+        pipeGapY[i] = math.randRange(3, height - pipeGapSize - 3);
         score++;
       }
 

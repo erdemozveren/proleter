@@ -15,7 +15,7 @@
 #   cmove 2     (x,y)
 #   ccolor 2    (fg,bg)
 #   creset 0
-#   getchr 0   (returns key -> popped)
+#   getChar 0   (returns key -> popped)
 #   print 1
 #
 # Arrays:
@@ -280,7 +280,7 @@ print_row_end:
   jmp print_y
 
 print_done:
-  # getchr (step-by-step)
+  # getChar (step-by-step)
   #loadg 3
   #pushs "sleep"
   #object_get

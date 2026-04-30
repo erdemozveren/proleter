@@ -17,6 +17,7 @@ main:
   load_lib
   storeg 0
   pushfn println
+  pushi 1
   object_new
   dup
   store 0
