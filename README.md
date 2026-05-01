@@ -45,6 +45,33 @@ Some helper code, examples, wording, and small implementation details were assis
 - Compile a small language to bytecode
 - TODO: Type checking isn’t strict yet — will enforce strict types later.
 
+## What it is not
+
+* Not a serious programming language
+* Not optimized
+* Not stable
+* Not memory-safe yet
+* Not a production VM
+* Not intended for real-world embedding
+
+Things may change or break often. This project is for fun and learning.
+
+### 🛠 Requirements
+
+* **CMake** ≥ 3.16
+* C compiler (GCC / Clang / MSVC)
+* **Node.js** >=18
+
+### 📦 Build
+
+```bash
+cmake -E remove_directory build
+cmake -S . -B build
+cmake --build build
+
+./build/proleter-vm
+```
+
 ## CLI
 
 Proleter includes a simple command line interface for running and building programs.
@@ -78,17 +105,6 @@ proleter-lang/
 ├─ examples/   small example programs
 └─ editor/     editor syntax files
 ````
-
-## What it is not
-
-* Not a serious programming language
-* Not optimized
-* Not stable
-* Not memory-safe yet
-* Not a production VM
-* Not intended for real-world embedding
-
-Things may change or break often. This project is for fun and learning.
 
 ## Goal
 
