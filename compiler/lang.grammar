@@ -119,7 +119,8 @@ Block
 /* ================= STATEMENTS ================= */
 
 Statement
-  = VarDecl
+  = ExportStmt
+  / VarDecl
   / IfStmt
   / WhileStmt
   / ForStmt
@@ -129,6 +130,14 @@ Statement
   / AsmStmt
   / AssignStmt
   / ExprStmt
+
+ExportStmt
+  = "export" __ expr:ObjectLiteral ";" _ {
+      return withLoc({
+        type: "ExportStmt",
+        expr
+      });
+    }
 
 AsmStmt
   = "@asm" _ "(" _ code:String _ ")" _ ";" _ {

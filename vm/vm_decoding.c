@@ -200,10 +200,10 @@ int vm_find_op(const char *s, OpCode *out) {
 
 bool vm_is_label(const char *s, StrBuf *out) {
   const char *p = s;
-  if (!isalpha((unsigned char)*p) && *p != '_')
+  if (!isalpha((unsigned char)*p) && *p != '_' && *p != '$')
     return false;
 
-  while (isalnum((unsigned char)*p) || *p == '_')
+  while (isalnum((unsigned char)*p) || *p == '_' || *p == '$')
     p++;
 
   if (*p != ':')
@@ -311,14 +311,6 @@ Inst *vm_load_program(VM *vm, const char *path) {
 
   int pc = 0;
   line = 1;
-
-  if (!vm_vm_is_label_exist("main")) {
-    printf("Program must have one main label to run\n"
-           "main:\n"
-           " pushi 0\n"
-           " ret\n");
-    exit(1);
-  }
 
   for (char *p = source; *p;) {
     char *line_start = p;

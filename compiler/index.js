@@ -2,8 +2,8 @@
 
 const fs = require("fs");
 const path = require("path");
-const parser = require("./parser");
-const { Emitter, TargetPlatform, EmitType } = require("./emitter");
+const parser = require("./parser/index.js");
+const { Emitter, EmitType, TargetPlatform } = require("./src/emitter.js");
 
 module.exports = {
   TargetPlatform, EmitType,
@@ -16,7 +16,10 @@ module.exports = {
     }
 
     let ast;
-    const emitter = new Emitter({ sourcePath: inputSourcePath, projectRoot, target, emit });
+    const emitter = new Emitter({
+      sourcePath: inputSourcePath, projectRoot, target, emit,
+      parse: parser.parse.bind(parser),
+    });
     try {
       ast = parser.parse(source);
       return emitter.compile(ast);

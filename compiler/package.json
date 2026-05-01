@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "generate-parser": "npx peggy ./lang.grammar -o ./parser.js"
+    "generate-parser": "npx peggy ./lang.grammar -o ./parser/index.js"
   },
   "keywords": [],
   "author": "",

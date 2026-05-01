@@ -39,7 +39,7 @@ func drawWalls(width: int, height: int) {
 }
 
 func main() {
-  std.input_raw(true);
+  std.inputRaw(true);
   std.inputNonblocking(true);
   var startMsgShowed:int = 0;
   var gridWidth: int = 60;
@@ -169,3 +169,5 @@ func main() {
 
   }
 }
+
+main();

@@ -105,7 +105,7 @@ func main() {
   var started: int = 0;
   var showHelp: int = 1;
 
-  std.input_raw(1);
+  std.inputRaw(1);
   std.inputNonblocking(1);
 
   while (true) {
@@ -201,3 +201,5 @@ func main() {
     std.sleep(50);
   }
 }
+
+main();
