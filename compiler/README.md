@@ -2,6 +2,8 @@
 
 Compiler is split into 4 parts.
 
+> Parser is auto-generated with peggy.js via `npm run generate-parser`
+
 ## `emitter.js`
 
 Start here when you want to see the main compile flow.
